@@ -1,13 +1,14 @@
 rm(list=ls())
-
+setwd("C:\\Users\\jakob\\Documents\\JakobMasterarbeit")
 #loading packages
+#install.packages("bayesplot")
 library(readxl) #to read in the data
 library(rstanarm) #Doing Bayesian probit GLMs for single species
 library(pROC) #calculating the AUC
 library(gjam) #Doing the joint estimation with the GJAM modelling aproach
 
 #read in the data (Species PA Data and covariates)
-df <- read_excel("MonthlyData.xlsx")
+df <- read_excel("MonthlyPAData.xlsx")
 str(df)
 #We ignore An_atroparvus, because it does not seem to be PA-data. No clue why?
 #Looks like abundance data
@@ -79,9 +80,77 @@ ml   <- list(ng = 1000, burnin = 100, typeNames = types)
 joint <- gjam(~ IA_500 + NDVI_500 + NDVIBEF_2000, ydata = y_train, xdata = train, modelList = ml)
 summary(joint)
 ###Comparison of the coefficients
-library(jtools) #helpful plotting tools to compare coefficients
-#https://cran.r-project.org/web/packages/jtools/vignettes/summ.html
+#Make a table (dataframe) to store different estimates and SEs according to the models
+###For Culex Perexiguus
+#For the coefficients
+cof_sum_px <- data.frame(matrix(ncol = 2, nrow = 4))
+co <- c("Coefficients_sin", "Coefficients_gjam")
+ro <- c("Intercept_sin", "IA500_sin", "NDVI500_sin", "NDVIBEF2000_sin")
+colnames(cof_sum_px) <- co
+rownames(cof_sum_px) <- ro
+#For the SEs
+se_sum_px <- data.frame(matrix(ncol = 2, nrow = 4))
+co <- c("SE_sin", "SE_gjam")
+colnames(se_sum_px) <- co
+rownames(se_sum_px) <- ro
+
+###For Anopheles troparvus
+#For the coefficients
+cof_sum_at <- cof_sum_px
+se_sum_at <- se_sum_px
+
+#Filling the tables accordingly
+cof_sum_px$Coefficients_sin <-  fit_cxper$coefficients
+cof_sum_px$Coefficients_gjam <- joint$parameters$betaMu[,"Cxperpre"]
+cof_sum_at$Coefficients_sin <-  fit_anatr$coefficients
+cof_sum_at$Coefficients_gjam <- joint$parameters$betaMu[,"Anatropre"]
+
+se_sum_px$SE_sin <-  fit_cxper$ses
+se_sum_px$SE_gjam <- joint$parameters$betaSe[,"Cxperpre"]
+se_sum_at$SE_sin <-  fit_anatr$ses
+se_sum_at$SE_gjam <- joint$parameters$betaSe[,"Anatropre"]
+
+#Coefficients and SEs for Culex perexiguus
+cof_sum_px
+se_sum_px
+#Everything looks pretty similar, as we expected (We expexted the environmental coefficients to
+#be the same. Difference between coefficients way smaller than according SEs.
+
+#Coefficients and SEs for Anopheles troparvus
+cof_sum_at
+se_sum_at
+#Everything looks pretty similar as expected.Difference between coefficients way smaller than according SEs.
+
+
+library(bayesplot) #helpful plotting tools to compare coefficients
+library(ggplot2)
+posterior <- as.matrix(fit_cxper)
+
+plot_title <- ggtitle("Posterior distributions",
+                      "with medians and 80% intervals")
+mcmc_areas(posterior,
+           pars = c("(Intercept)", "IA_500", "NDVI_500", "NDVIBEF_2000"),
+           prob = 0.8) + mcmc_areas(posterior,
+                                    pars = c("(Intercept)", "IA_500", "NDVI_500", "NDVIBEF_2000"),
+                                    prob = 0.8) + plot_title
+
+fit_cxper$ses
+
 ###Conditional Prediction
 #Culex perexiguus conditioned on Anopheles atroparvus
 
-#Anopheles atroparvus conditioned on Culex perexiguus
+
+#############Das hat fuktioniert
+
+# preparing testing data set for the gjam_predict function 
+test_gj <- df[-train_id,]
+test_gj$intercept <- rep(1 , nrow(test_gj)) #adding the intercept
+test_gj <- test_gj[,c("intercept", "IA_500", "NDVI_500", "NDVIBEF_2000")] # getting rid of all the unused variables
+yy <- y[-train_id,] 
+
+#storing input data in newdata
+newdata <- list(xdata = test_gj, ydataCond = yy[,2], nsim = 200) # conditionally predict out-of-sample
+#Doing the actual prediction
+p2      <- gjamPredict(output = joint, newdata = newdata)
+#########################
+
