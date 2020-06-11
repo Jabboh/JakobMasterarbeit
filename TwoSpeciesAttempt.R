@@ -59,7 +59,6 @@ dim(pred_cp_sin)
 #Is it correct that for each test data point 4000 draws from the posterior predictive 
 #distribution are made? So I could take the average of these draws as an estimation of the 
 # "expected" predicted y-value?
-summary(pred_cp_sin)
 pred_exp_cp_sin <- colMeans((pred_cp_sin))
 
 #for Anopheles atroparvus
@@ -68,10 +67,12 @@ pred_exp_at_sin <- colMeans((pred_at_sin))
 
 ####Quick Evaluation of Model Performance: To check whether model makes some sense
 perf_cp_sin <- auc(response = test$Cxperpre, predictor = pred_exp_cp_sin)
+perf_cp_sin
 #AUC = .74 >> seems ok for our purposes (remember: our goal is not to find the perfect
 #model for our data, but rather evaluate whether knowing one species helps our predictions
-#of the other one)
+#of the other one
 perf_at_sin <- auc(response = test$Anatropre, predictor = pred_exp_at_sin)
+perf_at_sin
 #AUC = .77 >> seems OK for our purposes
 
 ####Fitting a joint model of both species with GJAM
@@ -91,7 +92,8 @@ joint <- gjam(~ IA_500 + NDVI_500 + NDVIBEF_2000, ydata = y_train, xdata = train
 summary(joint)
 
 #Residual Correlations between the species
-joint$parameters$corMu #is corMu actually the residual correlation? How do you calculate that?
+joint$parameters$corMu 
+#is corMu actually the residual correlation? How do you calculate that?
 #You first estimate the environmental parameters and then you produce fitted y-values with the coefficients.
 #2. You take the residuals of this estimation and calculate the correlation between the residuals
 #of the two speices?
@@ -105,15 +107,13 @@ cor(train$Cxperpre, train$Anatropre)
 #For Culex Perexiguus
 #For the coefficients
 cof_sum_px <- data.frame(matrix(ncol = 2, nrow = 4))
-co <- c("Coefficients_sin", "Coefficients_gjam")
-ro <- c("Intercept_sin", "IA500_sin", "NDVI500_sin", "NDVIBEF2000_sin")
-colnames(cof_sum_px) <- co
-rownames(cof_sum_px) <- ro
+colnames(cof_sum_px) <- c("Coefficients_sin", "Coefficients_gjam")
+rownames(cof_sum_px) <- c("Intercept_sin", "IA500_sin", "NDVI500_sin", "NDVIBEF2000_sin")
+
 #For the SEs
 se_sum_px <- data.frame(matrix(ncol = 2, nrow = 4))
-co <- c("SE_sin", "SE_gjam")
-colnames(se_sum_px) <- co
-rownames(se_sum_px) <- ro
+colnames(se_sum_px) <- c("SE_sin", "SE_gjam")
+rownames(se_sum_px) <- c("Intercept_sin", "IA500_sin", "NDVI500_sin", "NDVIBEF2000_sin")
 
 ###For Anopheles troparvus
 #For the coefficients
@@ -140,7 +140,7 @@ se_sum_px
 #Coefficients and SEs for Anopheles troparvus
 cof_sum_at
 se_sum_at
-#Everything looks pretty similar as expected.Difference between coefficients way smaller than according SEs.
+#Everything looks pretty similar as expected. Difference between coefficients way smaller than according SEs.
 
 ####Conditional Prediction on the test set
 
@@ -166,10 +166,12 @@ p_at     <- gjamPredict(output = joint, newdata = newdata)
 ###Model Performance Evaluation with AUC
 #For Culex Perexiguus
 perf_cp_gj <- auc(response = test$Cxperpre, predictor = p_cp$prPresent[,1])
+perf_cp_gj
 # The AUC is with .78 slightly better than for the univariate case (.74)
 
 #For Anopheles atroparvus
 perf_at_gj <- auc(response = test$Anatropre, predictor = p_at$prPresent[,2])
+perf_at_gj
 #The AUC is with .79 slightly better than for the univariate case (.77)
 #Overall, I feel like the improvement is not very significant.
 
