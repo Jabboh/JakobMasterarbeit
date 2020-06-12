@@ -31,8 +31,7 @@ y <- spec[,c("Cxperpre", "Anatropre")]
 
 #Transform "Mes" (month when record was taken) into a factor variable
 df$Mes <- as.factor(df$Mes)
-levels(df$Mes) <- list(A=c(1,3), B=2)
-
+#df$Mes <- factor(df$Mes, levels =c("Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre"))
 
 #Split the data set in training (70 %) and test (30%) set
 train_size <- floor(0.7 * nrow(y))
@@ -49,7 +48,8 @@ test <- df[-train_id, ]
 #For this we use the stan_glm function from the rstanarm-package
 
 #fitting the model for Culex Perexiguus
-fit_cp <- stan_glm(Cxperpre ~ IA_500 + NDVI_500 + NDVIBEF_2000 + month, data = train, family = binomial(link = "probit"), seed = 333)
+
+fit_cp <- stan_glm(Cxperpre ~ IA_500 + NDVI_500 + NDVIBEF_2000 + Mes, data = train, family = binomial(link = "probit"), seed = 333)
 summary(fit_cp)
 
 #fitting the model for Anopheles atroparvus
