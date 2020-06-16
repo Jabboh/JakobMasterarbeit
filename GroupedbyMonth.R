@@ -32,6 +32,12 @@ y <- spec[,c("Cxperpre", "Anatropre")]
 #Transform "Mes" (month when record was taken) into a factor variable
 df$Mes <- as.factor(df$Mes)
 #df$Mes <- factor(df$Mes, levels =c("Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre"))
+#For some reason, stan_glm produces an error if you convert "Mes" this way: 
+#Initialization between (-2, 2) failed after 100 attempts. 
+#Chain 2:  Try specifying initial values, reducing ranges of constrained values, or reparameterizing the model.
+#[1] "Error in sampler$call_sampler(args_list[[i]]) : Initialization failed."
+#[1] "error occurred during calling the sampler; sampling not done"
+str(df$Mes)
 
 #Split the data set in training (70 %) and test (30%) set
 train_size <- floor(0.7 * nrow(y))
@@ -109,7 +115,7 @@ ml   <- list(ng = 2000, burnin = 100, typeNames = types)
 #is 2000 for number of Gibbs steps ok?
 
 #runnig GJAM
-joint <- gjam(~ IA_500 + NDVI_500 + NDVIBEF_2000 + Abril + Mayo + Junio + Julio + Agosto, ydata = y_train, xdata = train, modelList = ml)
+joint <- gjam(~ IA_500 + NDVI_500 + NDVIBEF_2000 + Agosto + Julio +Junio + Mayo + Septiembre, ydata = y_train, xdata = train, modelList = ml)
 summary(joint)
 
 #Residual Correlations between the species
@@ -127,15 +133,16 @@ cor(train$Cxperpre, train$Anatropre)
 #Make a table (dataframe) to store different coefficients and SEs according to the models
 #For Culex Perexiguus
 #For the coefficients
-q = 8 # Number of predictors
-cof_sum_px <- data.frame(matrix(ncol = 2, nrow = q + 1))
+q = length(fit_cp$coefficients) # Number of predictors
+
+cof_sum_px <- data.frame(matrix(ncol = 2, nrow = q))
 colnames(cof_sum_px) <- c("Coefficients_sin", "Coefficients_gjam")
-rownames(cof_sum_px) <- c("Intercept_sin", "IA500_sin", "NDVI500_sin", "NDVIBEF2000_sin", "Abril", "Mayo", "Junio", "Julio", "Agosto")
+rownames(cof_sum_px) <- names(fit_cp$coefficients)
 
 #For the SEs
-se_sum_px <- data.frame(matrix(ncol = 2, nrow = q + 1))
+se_sum_px <- data.frame(matrix(ncol = 2, nrow = q))
 colnames(se_sum_px) <- c("SE_sin", "SE_gjam")
-rownames(se_sum_px) <- c("Intercept_sin", "IA500_sin", "NDVI500_sin", "NDVIBEF2000_sin", "Abril", "Mayo", "Junio", "Julio", "Agosto")
+rownames(se_sum_px) <- names(fit_cp$coefficients)
 
 ###For Anopheles troparvus
 #For the coefficients
@@ -170,9 +177,9 @@ se_sum_at
 #y-data to test the model
 y_test <- y[-train_id, ]
 #x-data to test the model
-test_gj <- df[-train_id,]
+test_gj <- data_dum[-train_id,]
 test_gj$intercept <- rep(1 , nrow(test_gj)) #adding the intercept
-test_gj <- test_gj[,c("intercept", "IA_500", "NDVI_500", "NDVIBEF_2000")] # getting rid of all the unused variables
+test_gj <- test_gj[,c("intercept", "IA_500", "NDVI_500", "NDVIBEF_2000", "Agosto", "Julio", "Junio", "Mayo", "Septiembre")] # getting rid of all the unused variables
 
 #Culex perexiguus conditioned on Anopheles atroparvus
 #storing input data in newdata
@@ -189,12 +196,12 @@ p_at     <- gjamPredict(output = joint, newdata = newdata)
 #For Culex Perexiguus
 perf_cp_gj <- auc(response = test$Cxperpre, predictor = p_cp$prPresent[,1])
 perf_cp_gj
-# The AUC is with .78 slightly better than for the univariate case (.74)
+# The AUC is with .79 slightly better than for the univariate case (.76)
 
 #For Anopheles atroparvus
 perf_at_gj <- auc(response = test$Anatropre, predictor = p_at$prPresent[,2])
 perf_at_gj
-#The AUC is with .79 slightly better than for the univariate case (.77)
+#The AUC is with .89 slightly worse than for the univariate case (.9)
 #Overall, I feel like the improvement is not very significant.
 
 ####plot GJAM-Predictions against the univariate probit predictions
@@ -208,12 +215,10 @@ provsgj_cp <- ggplot(d_gg_cp, aes(x=cp_pr, y=cp_gj, color=factor(at), shape = fa
   labs( color = "PA of Anopheles Atroparvus", shape = "PA of Culex Perexiguus")
 provsgj_cp
 #You can see that there is a positive linear relationship between the predictions
-#of the two models grouped by the PA of Anopheles Atroparvus (the species we conditioned on). This indicates
-#that both models roughly do the same/environmental signals are treated similarily.
-#The slopes of the two lines are not equal to 1 (Would we expect this? I think, we do, if we 
-#assume that the environmental coefficients are the same). You can see that the conditioning on 
-#Anapheles Atroparvus has a clear effect (The blue and red points form two distinct groups)
-#on the predictions in GJAM compared to the univariate predictions. GJAM predicts a roughly 37 % points
+#of the two models. This indicates that both models roughly do the same/environmental signals are treated similarily.
+#You can see that the conditioning on 
+#Anapheles Atroparvus has a clear effect (The blue and red points are separated)
+#on the predictions in GJAM compared to the univariate predictions. GJAM predicts a
 #higher probability of occurence for plots where Anopheles Atroparvus is present compared to
 #plots where it's absent.
 
@@ -227,3 +232,7 @@ provsgj_at <- ggplot(d_gg_at, aes(x = at_pr, y = at_gj, color=factor(cp), shape 
 provsgj_at
 #Similar results as for Culex Perexiguus.
 
+#Fragen an Bj?rn:
+#ist das Vorgehen von jeweilig einzelnen Regressionen f?r jeden Monat dem diesen (Monatsdummies und eine Regression
+#f?r den ganzen Datensatz) vorzuziehen. Hauptunterschied meiner Meinung ist, dass der Ansatz mit eine Regression pro
+#Monat zul?sst, dass die Koeffizienten ?ber die Monate variieren k?nnen.

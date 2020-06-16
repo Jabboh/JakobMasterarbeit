@@ -176,7 +176,23 @@ perf_at_gj
 #The AUC is with .79 slightly better than for the univariate case (.77)
 #Overall, I feel like the improvement is not very significant.
 
-####plot GJAM-Predictions against the univariate probit predictions
+###Unconditional GJAM Predictions 
+newdata <- list(xdata = test_gj, nsim = 200) # conditionally predict out-of-sample
+#Doing the actual prediction
+p_uc      <- gjamPredict(output = joint, newdata = newdata)
+
+#AUCs
+#For Culex Perexiguus
+perf_cp_uc <- auc(response = test$Cxperpre, predictor = p_uc$prPresent[,"Cxperpre"])
+perf_cp_uc
+# The AUC is with .74 pretty much the same as in the univariate case (.74)
+
+#For Anopheles atroparvus
+perf_at_uc <- auc(response = test$Anatropre, predictor = p_uc$prPresent[,"Anatropre"])
+perf_at_uc
+#The AUC is with .75 slightly worse than for the univariate case (.77)
+
+####plot conditional GJAM-Predictions against the univariate probit predictions
 
 #for Culex perexiguus
 d_gg_cp <- data.frame(cbind(pred_exp_cp_sin, p_cp$prPresent[,1], p_cp$prPresent[,2], y_test$Cxperpre))
@@ -206,3 +222,28 @@ provsgj_at <- ggplot(d_gg_at, aes(x = at_pr, y = at_gj, color=factor(cp), shape 
 provsgj_at
 #Similar results as for Culex Perexiguus.
 
+
+### plot unconditional GJAM-predictions against the univariate prediction
+
+#For Culex Perexiguus
+d_gg_ucsin_cp <- data.frame(cbind(pred_exp_cp_sin, p_uc$prPresent[,"Cxperpre"], y_test$Cxperpre))
+names(d_gg_ucsin_cp) <- c("cp_pr", "cp_gj_un", "cp")
+provsgjun_cp <- ggplot(d_gg_ucsin_cp, aes(x=cp_pr, y=cp_gj_un, color=factor(cp))) + geom_point() +
+  ggtitle("Univariate vs. Unconditional GJAM Predictions for Culex Perexiguus") +
+  xlab("Predictions from Univariate Probit ") + ylab("Unconditional Predictions from GJAM") +
+  labs(color = "True PA of Culex Perexiguus")
+provsgjun_cp
+#They look as if they are centered around the identity line >> the predictions are more or less the same!
+
+#for Anopheles Atroparvus
+d_gg_ucsin_at <- data.frame(cbind(pred_exp_at_sin, p_uc$prPresent[,"Anatropre"], y_test$Anatropre))
+names(d_gg_ucsin_at) <- c("at_pr", "at_gj_un", "at")
+provsgjun_at <- ggplot(d_gg_ucsin_at, aes(x=at_pr, y=at_gj_un, color=factor(at))) + geom_point() +
+  ggtitle("Univariate vs. Unconditional GJAM Predictions for Anopheles Atroparvus") +
+  xlab("Predictions from Univariate Probit ") + ylab("Unconditional Predictions from GJAM") +
+  labs(color = "True PA of Anopheles Atroparvus")
+provsgjun_at
+#They look as if they are centered around the identity line >> the predictions are more or less the same!
+
+#In summary, if we would plot conditional GJAM predictions against unconditional gjam predictions,
+#we would get the same results as in our first two plots (probit predictions vs. conditional gjam predictions)
