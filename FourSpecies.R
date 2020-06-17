@@ -254,60 +254,83 @@ perf_at_gj
 
 #for Culex perexiguus
 #make a categorical variable for which species are present: 0: no species present; 1: cpi, 2: cm; 3:at
-#4:cpi & cm, 5: cm & at; 6: at & cpi; 7: all are present
-pres <- select(as.data.frame(p_cp$prPresent), -"Cxperpre")
-function (x){
-  
-}
-pres_cat <- zeros(1, 1)
-for (i in ncol(pres)){
-  if(pres[1,i] == 0 & pres[2,i] == 0 & pres[3,i] == 0){
+#4:cpi & cm, 5: cpi & at; 6: cm & at; 7: all are present. This will later be used for coloring in plot
+#select all the species on which we condition
+pres_cp <- select(as.data.frame(p_cp$prPresent), -"Cxperpre")
+#Function that returns categorical value corresponding to the above specification (value shows which species
+#are present)
+presence <- function (x){
+  if(x[1] == 0 & x[2] == 0 & x[3] == 0){
     zeros = 0
-  } else if(pres[1,i] == 1 & pres[2,i] == 0 & pres[3,i] == 0){
+  } else if(x[1] == 1 & x[2] == 0 & x[3] == 0){
     zeros = 1
-  } else if(pres[1,i] == 0 & pres[2,i] == 1 & pres[3,i] == 0){
+  } else if(x[1] == 0 & x[2] == 1 & x[3] == 0){
     zeros = 2
-  } else if(pres[1,i] == 0 & pres[2,i] == 0 & pres[3,i] == 1){
+  } else if(x[1] == 0 & x[2] == 0 & x[3] == 1){
     zeros = 3
-  } else if(pres[1,i] == 1 & pres[2,i] == 1 & pres[3,i] == 0){
+  } else if(x[1] == 1 & x[2] == 1 & x[3] == 0){
     zeros = 4
-  } else if(pres[1,i] == 1 & pres[2,i] == 0 & pres[3,i] == 1){
+  } else if(x[1] == 1 & x[2] == 0 & x[3] == 1){
     zeros = 5
-  } else if(pres[1,i] == 0 & pres[2,i] == 1 & pres[3,i] == 1){
+  } else if(x[1] == 0 & x[2] == 1 & x[3] == 1){
     zeros = 6
-  } else if(pres[1,i] == 1 & pres[2,i] == 1 & pres[3,i] == 1){
-    zeros = 7
-  }
+  } else {
+    zeros = 7 
+  } 
+  return(zeros)
 }
-pres[1,1]
-d_gg_cp <- data.frame(cbind(pred_exp_cp_sin, p_cp$prPresent[,"Cxperpre"],  select(as.data.frame(p_cp$prPresent), -"Cxperpre"), y_test$Cxperpre))
-names(d_gg_cp) <- c("cp_pr", "cp_gj", "cpi", "cm" ,"at", "cp")
-provsgj_cp <- ggplot(d_gg_cp, aes(x=cp_pr, y=cp_gj, color=factor("cpi"), fill = factor("cm"), shape = factor(cp))) +
-  geom_point() + ggtitle("Univariate vs. Conditional Predictions for Culex Perexiguus") +
-  scale_color_manual(values=c("#999999", "#E69F00")) +
+#apply function to all rows of dataframe that shows PA of all species we condition on (So, basically
+#we transofrm a three dimensional variable into a one-dimensional one without losing any information.
+#This is needed for ggplot later)
+pres_cat_cp <- apply(pres_cp, 1, presence)
+
+
+d_gg_cp <- data.frame(cbind(pred_exp_cp_sin, p_cp$prPresent[,"Cxperpre"],  pres_cat_cp, y_test$Cxperpre))
+names(d_gg_cp) <- c("cp_pr", "cp_gj", "con_spec", "cp")
+provsgj_cp <- ggplot(d_gg_cp, aes(x=cp_pr, y=cp_gj) ) +
+  geom_point(aes(fill = factor(con_spec), shape = factor(cp)), color= "black") +
+  scale_shape_manual(values=c(21, 22), labels = c("Absent", "Present")) + 
+  scale_fill_manual(values=c("white", "red", "blue", "yellow", "purple", "orange", "green", "black"),
+                    labels = c("all absent", "cpi", "cm", "at", "cpi & cm", "cpi & at", "cm & at", "all present")) +
+  ggtitle("Univariate vs. Conditional Predictions for Culex Perexiguus") + 
   xlab("Predictions from Univariate Probit ") + ylab("Conditional Predictions from GJAM") +
-  labs( color = "PA of Anopheles Atroparvus", shape = "PA of Culex Perexiguus")
+  guides(fill=guide_legend(override.aes=list(shape=21))) +
+  labs(fill = "Presence of Conditioning Species", shape = "PA of Culex Perexiguus") #Conditioning Species kann man bestimmt nicht sagen
+
 provsgj_cp
+
 #You can see that there is a positive linear relationship between the predictions
-#of the two models grouped by the PA of Anopheles Atroparvus (the species we conditioned on). This indicates
-#that both models roughly do the same/environmental signals are treated similarily.
-#The slopes of the two lines are not equal to 1 (Would we expect this? I think, we do, if we 
-#assume that the environmental coefficients are the same). You can see that the conditioning on 
-#Anapheles Atroparvus has a clear effect (The blue and red points form two distinct groups)
-#on the predictions in GJAM compared to the univariate predictions. GJAM predicts a roughly 37 % points
-#higher probability of occurence for plots where Anopheles Atroparvus is present compared to
-#plots where it's absent.
+#of the two models. This indicates that both models roughly do the same/environmental signals are 
+#treated similarily.You can see that there are heterogeneous effects
+#of the presences of the different species we condition on. The presence of Culex Pipiens and Anopheles
+#troparvus has a positive effect on the predictions in GJAM, whereas the mere presence of Culex modestus has
+#a negative effect. There seem to be three lines around which the points gather: 1. The bottom line:
+#Absence of all species and presence of just Culex modestus. (Probit predictions are higher than GJAM
+#predictions); 2. The middle line (GJAM prediction are slightly higher than probit predictions): Presence of (i) Culex pipiens with or without Culex Modestus , (ii)
+#Anopheles Atroparvus with or without Culex modestus; 3. Upper line(GJAM predictions are much higher than
+#probit predictions): Culex pipiens and Anopheles troparvus are present with or without Culex modestus.
+
+
 
 #for Anopheles Atroparvus
-d_gg_at <- data.frame(cbind(pred_exp_at_sin, p_at$prPresent[,2], p_at$prPresent[,1], y_test$Anatropre))
-names(d_gg_at) <- c("at_pr", "at_gj", "cp", "at")
-provsgj_at <- ggplot(d_gg_at, aes(x = at_pr, y = at_gj, color=factor(cp), shape = factor(at))) + geom_point() +
-  ggtitle("Univariate vs. Conditional Predictions for Anopheles Atroparvus") +
+#Dataframe with species that we conditioned on:
+pres_at <- select(as.data.frame(p_at$prPresent), -"Anatropre")
+
+#Make one categorical variable out of above datafame with the following levels:
+#0: no species present; 1: cpi, 2: cm; 3:cp 4:cpi & cm, 5: cpi & cp; 6: cm & cp; 7: all are present. 
+pres_cat_at <- apply(pres_at, 1, presence)
+
+#Input data for ggplot
+d_gg_at <- data.frame(cbind(pred_exp_at_sin, p_at$prPresent[,"Anatropre"],  pres_cat_at, y_test$Anatropre))
+names(d_gg_at) <- c("at_pr", "at_gj", "con_spec", "at")
+provsgj_at <- ggplot(d_gg_at, aes(x=at_pr, y=at_gj) ) +
+  geom_point(aes(fill = factor(con_spec), shape = factor(at)), color= "black") +
+  scale_shape_manual(values=c(21, 22), labels = c("Absent", "Present")) + 
+  scale_fill_manual(values=c("white", "red", "blue", "yellow", "purple", "orange", "green", "black"),
+                    labels = c("all absent", "cpi", "cm", "cp", "cpi & cm", "cpi & cp", "cm & cp", "all present")) +
+  ggtitle("Univariate vs. Conditional Predictions for Anopheles Atroparvus") + 
   xlab("Predictions from Univariate Probit ") + ylab("Conditional Predictions from GJAM") +
-  labs( color = "PA of Culex Perexiguus", shape = "PA of Anopheles Atroparvus")
+  guides(fill=guide_legend(override.aes=list(shape=21))) +
+  labs(fill = "Presence of Conditioning Species", shape = "PA of Anopheles Atroparvus")
 provsgj_at
 #Similar results as for Culex Perexiguus.
-
-
-
-grp = rep(LETTERS[1:5],each = 2)
