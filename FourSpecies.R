@@ -309,10 +309,12 @@ provsgj_cp
 #predictions); 2. The middle line (GJAM prediction are slightly higher than probit predictions): Presence of (i) Culex pipiens with or without Culex Modestus , (ii)
 #Anopheles Atroparvus with or without Culex modestus; 3. Upper line(GJAM predictions are much higher than
 #probit predictions): Culex pipiens and Anopheles troparvus are present with or without Culex modestus.
+#This, can be explained with the fact that residual correlations of Culex Perexiguus are high with 
+#Culex pipiens and Anopheles Atroparvus, but very low with Culex modestus (the raw correlation between
+#species has the same tendencies)
 
 
-
-#for Anopheles Atroparvus
+###for Anopheles Atroparvus
 #Dataframe with species that we conditioned on:
 pres_at <- select(as.data.frame(p_at$prPresent), -"Anatropre")
 
@@ -334,3 +336,118 @@ provsgj_at <- ggplot(d_gg_at, aes(x=at_pr, y=at_gj) ) +
   labs(fill = "Presence of Conditioning Species", shape = "PA of Anopheles Atroparvus")
 provsgj_at
 #Similar results as for Culex Perexiguus.
+
+###For Culex Pipiens
+
+#Dataframe with species that we conditioned on:
+pres_cpi <- select(as.data.frame(p_cpi$prPresent), -"Cxpippre")
+
+#Make one categorical variable out of above datafame with the following levels:
+#0: no species present; 1: cm, 2: cp; 3:at 4:cm & cp, 5: cm & at; 6: cp & at; 7: all are present. 
+pres_cat_cpi <- apply(pres_cpi, 1, presence)
+
+#Input data for ggplot
+d_gg_cpi <- data.frame(cbind(pred_exp_cpi_sin, p_cpi$prPresent[,"Cxpippre"],  pres_cat_cpi, y_test$Cxpippre))
+names(d_gg_cpi) <- c("cpi_pr", "cpi_gj", "con_spec", "cpi")
+provsgj_cpi <- ggplot(d_gg_cpi, aes(x=cpi_pr, y=cpi_gj) ) +
+  geom_point(aes(fill = factor(con_spec), shape = factor(cpi)), color= "black") +
+  scale_shape_manual(values=c(21, 22), labels = c("Absent", "Present")) + 
+  scale_fill_manual(values=c("white", "red", "blue", "yellow", "purple", "orange", "green", "black"),
+                    labels = c("all absent", "cm", "cp", "at", "cm & cp", "cm & at", "cp & at", "all present")) +
+  ggtitle("Univariate vs. Conditional Predictions for Culex Pipiens") + 
+  xlab("Predictions from Univariate Probit ") + ylab("Conditional Predictions from GJAM") +
+  guides(fill=guide_legend(override.aes=list(shape=21))) +
+  labs(fill = "Presence of Conditioning Species", shape = "PA of Culex Modestus")
+provsgj_cpi
+
+#Linear relationships are hardly detectable (Why is this the case?). But you can see which species lead to higher predictions in
+#gjam: Presence of Culex perexiguus and Anopheles Atroparvus lead to highest increase; followed by 
+#Culex Modestus and Culex perexiguus as well as Culex Modestus and Anopheles Atroparvus; followed
+#by Culex perexiguus as well as Anopheles Atroparvus. GJAM predictions are only consistently higher 
+#than univariate probit predictions if Culex perexiguus and Anopheles Atroparvus are both present.
+#Residual and raw correlation, again, explain which species leads to higher predictions in GJAM.
+###For Culex modestus
+
+#Dataframe with species that we conditioned on:
+pres_cm <- select(as.data.frame(p_cm$prPresent), -"Cxmodpre")
+
+#Make one categorical variable out of above datafame with the following levels:
+#0: no species present; 1: cpi, 2: cp; 3:at 4:cpi & cp, 5: cpi & at; 6: cp & at; 7: all are present. 
+pres_cat_cm <- apply(pres_cm, 1, presence)
+
+#Input data for ggplot
+d_gg_cm <- data.frame(cbind(pred_exp_cm_sin, p_cm$prPresent[,"Cxmodpre"],  pres_cat_cm, y_test$Cxmodpre))
+names(d_gg_cm) <- c("cm_pr", "cm_gj", "con_spec", "cm")
+provsgj_cm <- ggplot(d_gg_cm, aes(x=cm_pr, y=cm_gj) ) +
+  geom_point(aes(fill = factor(con_spec), shape = factor(cm)), color= "black") +
+  scale_shape_manual(values=c(21, 22), labels = c("Absent", "Present")) + 
+  scale_fill_manual(values=c("white", "red", "blue", "yellow", "purple", "orange", "green", "black"),
+                    labels = c("all absent", "cpi", "cp", "at", "cpi & cp", "cpi & at", "cp & at", "all present")) +
+  ggtitle("Univariate vs. Conditional Predictions for Culex Modestus") + 
+  xlab("Predictions from Univariate Probit ") + ylab("Conditional Predictions from GJAM") +
+  guides(fill=guide_legend(override.aes=list(shape=21))) +
+  labs(fill = "Presence of Conditioning Species", shape = "PA of Culex Modestus")
+provsgj_cm
+#Pretty much looks like one "Punktewolke" (because residual and raw correlations are very weak),
+#only very small difference between the "conditioning" species. 
+#The predictions between GJAM and Probit seem to be pretty similar across observations (consistent with correlations).
+#GJAM predicts slightly higher presence probabilities, if Culex Pipiens and or Anopheles Atroparvus
+#are present and slightly lower probabilities, if all species are absent or only Culex Perexigus is present.
+
+#######Unconditional Predictions
+
+###Unconditional GJAM Predictions 
+newdata <- list(xdata = test_gj, nsim = 200) # conditionally predict out-of-sample
+#Doing the actual prediction
+p_uc      <- gjamPredict(output = joint, newdata = newdata)
+
+###AUCs
+#For Culex Pipiens
+perf_cpi_uc <- auc(response = test$Cxpippre, predictor = p_uc$prPresent[,"Cxpippre"])
+perf_cpi_uc
+# The AUC is with .64 pretty much the same as in the univariate case (.63)
+
+# For Culex Modestus
+perf_cm_uc <- auc(response = test$Cxmodpre, predictor = p_uc$prPresent[,"Cxmodpre"])
+perf_cm_uc
+# The AUC is with .66 pretty much the same as in the univariate case (.67)
+
+#For Culex Perexiguus
+perf_cp_uc <- auc(response = test$Cxperpre, predictor = p_uc$prPresent[,"Cxperpre"])
+perf_cp_uc
+# The AUC is with .74 pretty much the same as in the univariate case (.74)
+
+#For Anopheles atroparvus
+perf_at_uc <- auc(response = test$Anatropre, predictor = p_uc$prPresent[,"Anatropre"])
+perf_at_uc
+#The AUC is with .79 pretty much the same as in the univariate case (.79)
+
+#Overall, there are no improvements in GJAM compared to a univariate probit model.
+
+### plot unconditional GJAM-predictions against the univariate prediction
+
+#For Culex Perexiguus
+d_gg_uc_cp <- data.frame(cbind(pred_exp_cp_sin, p_uc$prPresent[,"Cxperpre"], y_test$Cxperpre))
+names(d_gg_uc_cp) <- c("cp_pr", "cp_gj_un", "cp")
+provsgjun_cp <- ggplot(d_gg_uc_cp, aes(x=cp_pr, y=cp_gj_un, color=factor(cp))) + geom_point() +
+  ggtitle("Univariate vs. Unconditional GJAM Predictions for Culex Perexiguus") +
+  xlab("Predictions from Univariate Probit ") + ylab("Unconditional Predictions from GJAM") +
+  labs(color = "True PA of Culex Perexiguus")
+provsgjun_cp
+#They look as if they are centered around the identity line >> the predictions are more or less the same!
+
+#for Anopheles Atroparvus
+d_gg_uc_at <- data.frame(cbind(pred_exp_at_sin, p_uc$prPresent[,"Anatropre"], y_test$Anatropre))
+names(d_gg_uc_at) <- c("at_pr", "at_gj_un", "at")
+provsgjun_at <- ggplot(d_gg_uc_at, aes(x=at_pr, y=at_gj_un, color=factor(at))) + geom_point() +
+  ggtitle("Univariate vs. Unconditional GJAM Predictions for Anopheles Atroparvus") +
+  xlab("Predictions from Univariate Probit ") + ylab("Unconditional Predictions from GJAM") +
+  labs(color = "True PA of Anopheles Atroparvus")
+provsgjun_at
+#They look as if they are centered around the identity line >> the predictions are more or less the same!
+#I think that prooves Björn Point >> We could also make one plot with all the species. Since they should be
+#all on the same line, this could illustrate the finding, that unconditional GJAM predictions and univariate
+#predictions are pretty much the same.
+#In summary, if we would plot conditional GJAM predictions against unconditional gjam predictions,
+#we would get the same results as in our first two plots (probit predictions vs. conditional gjam predictions)
+
