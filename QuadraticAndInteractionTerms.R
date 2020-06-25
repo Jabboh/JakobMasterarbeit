@@ -1,7 +1,7 @@
 #stan_glm function macht Faxen, der "initialization  failed"-error macht die Probleme
 
 rm(list=ls())
-setwd("C:\\Users\\Jakob\\Documents\\Uni\\GCE\\Thesis\\Abundance\\Modellieren\\JakobMasterarbeit")
+setwd("C:\\Users\\jakob\\Documents\\JakobMasterarbeit\\Data")
 #loading packages
 library(readxl) #to read in the data
 library(rstanarm) #Doing Bayesian probit GLMs for single species
@@ -49,21 +49,19 @@ test <- df[-train_id, ]
 #For this we use the stan_glm function from the rstanarm-package
 
 #fitting the model for Culex Perexiguus
-fit_cp <- stan_glm(Cxperpre ~ polym(IA_500, NDVI_500, NDVIBEF_2000, degree=2, raw=TRUE), data = train, family = binomial(link = "probit"), seed = 333) #funkioniert wenn man nicht scaled
-#Rename the coefficient in a more convenient way
-#names(fit_cp$coefficients) <- c('intercept', 'IA_500','IA_500^2','NDVI_500', 'IA_500*NDVI_500', 'NDVI_500^2', 'NDVIBEF_2000',
-                                'IA_500*NDVIBEF_2000', 'NDVI_500*NDVIBEF_2000', 'NDVIBEF_2000^2')
-#doesnt work :/
+fit_cp <- stan_glm(Cxperpre ~ (IA_500 + NDVI_500 + NDVIBEF_2000)^2 + I(IA_500^2) + I(NDVI_500^2) + I(NDVIBEF_2000^2), data = train, family = binomial(link = "probit"), init_r = 1, seed = 333)
 summary(fit_cp)
-fit_cp_2 <- stan_glm(Cxperpre ~ (IA_500 + NDVI_500 + NDVIBEF_2000)^2, data = train, family = binomial(link = "probit"), seed = 333)
-summary(fit_cp_2)
-#does not work with the other quadratic terms. Don't know why.
-fit_cp_3 <- stan_glm(Cxperpre ~ I(IA_500^2) + I(NDVI_500^2) + I(NDVIBEF_2000^2), data = train, family = binomial(link = "probit"), seed = 333)
-#works with just quadratic terms, but fucks up if everything is included. Need to understand more what 
-#stan_glm actually does...
+#"significant on the .1-level are IA_500, NDVIBEF_2000, I(NDVI_500^2), I(NDVIBEF_2000^2), IA_500:NDVIBEF_2000
+#and NDVI_500:NDVIBEF_2000
+#Remember without the interactions and quadratic terms the following variables were significant:
+#(Intercept), IA_500 and NDVIBEF_2000
+
 #fitting the model for Anopheles atroparvus
-fit_at <- stan_glm(Anatropre ~ (IA_500 + NDVI_500 + NDVIBEF_2000)^2 + I(IA_500^2), data = train, family = binomial(link = "probit"), seed = 333)
+fit_at <- stan_glm(Anatropre ~ (IA_500 + NDVI_500 + NDVIBEF_2000)^2 + I(IA_500^2) + I(NDVI_500^2) + I(NDVIBEF_2000^2), data = train, family = binomial(link = "probit"), init_r = 1, seed = 333)
 summary(fit_at)
+#"significant on the .1-level are NDVIBEF_2000, I(NDVIBEF_2000^2), IA_500:NDVI_500 and IA_500:NDVIBEF_2000
+#Remember without the interactions and quadratic terms the following variables were significant: Intercept
+#and NDVIBEF_2000
 ####predictions on the test set
 
 #for Culex perexiguus
@@ -80,12 +78,12 @@ pred_exp_at_sin <- colMeans((pred_at_sin))
 ####Quick Evaluation of Model Performance: To check whether model makes some sense
 perf_cp_sin <- auc(response = test$Cxperpre, predictor = pred_exp_cp_sin)
 perf_cp_sin
-#AUC = .74. This is the same as in the case without the quadratic and interaction terms >> Does that make sense?
+#AUC = .73. This is the same as in the case without the quadratic and interaction terms >> Does that make sense?
 #should be   a little higher, bc way more predictors (but don't forget overfitting!...)
-#... Maybe fit_cp isn't doing what I am thinking?
+
 perf_at_sin <- auc(response = test$Anatropre, predictor = pred_exp_at_sin)
 perf_at_sin
-#AUC = .77 >> seems OK for our purposes
+#AUC = .8 (.03 higher than in our "simple" model)
 
 ####Fitting a joint model of both species with GJAM
 
@@ -124,7 +122,7 @@ colnames(cof_sum_px) <- c("Coefficients_sin", "Coefficients_gjam")
 rownames(cof_sum_px) <- names(fit_cp$coefficients)
 
 #For the SEs
-se_sum_px <- data.frame(matrix(ncol = 2, nrow = 4))
+se_sum_px <- data.frame(matrix(ncol = 2, nrow = q))
 colnames(se_sum_px) <- c("SE_sin", "SE_gjam")
 rownames(se_sum_px) <- names(fit_cp$coefficients)
 
@@ -158,35 +156,56 @@ se_sum_at
 ####Conditional Prediction on the test set
 
 # preparing testing data set for the gjam_predict function 
+
+#adding all the squared, interaction and intercept terms (This is cumbersome, but I don't know a way around
+#in "gjamPredict")
+
+df$"I(IA_500^2)" <- (df$IA_500)^2
+df$"I(NDVI_500^2)" <- (df$NDVI_500)^2
+df$"I(NDVIBEF_2000^2)" <- (df$NDVIBEF_2000)^2
+df$"IA_500:NDVI_500" <- (df$IA_500) * (df$NDVI_500)
+df$"IA_500:NDVIBEF_2000" <- (df$IA_500) * (df$NDVIBEF_2000)
+df$"NDVI_500:NDVIBEF_2000" <- (df$NDVIBEF_2000) * (df$NDVI_500)
+
+
+#rerun gjam with this structure
+joint2 <- gjam(~ IA_500 + NDVI_500 + NDVIBEF_2000 + I(IA_500^2) + I(NDVI_500^2) + I(NDVIBEF_2000^2) +
+                 IA_500:NDVI_500 + IA_500:NDVIBEF_2000 + NDVI_500:NDVIBEF_2000, ydata = y_train,
+               xdata = train, modelList = ml)
+
+
 #y-data to test the model
 y_test <- y[-train_id, ]
 #x-data to test the model
 test_gj <- df[-train_id,]
 test_gj$intercept <- rep(1 , nrow(test_gj)) #adding the intercept
-test_gj <- test_gj[,c("intercept", "IA_500", "NDVI_500", "NDVIBEF_2000")] # getting rid of all the unused variables
+
+test_gj <- test_gj[,c("intercept", "IA_500", "NDVI_500", "NDVIBEF_2000", "I(IA_500^2)",
+                      "I(NDVI_500^2)", "I(NDVIBEF_2000^2)", "IA_500:NDVI_500", "IA_500:NDVIBEF_2000",
+                      "NDVI_500:NDVIBEF_2000")] # getting rid of all the unused variables
 
 #Culex perexiguus conditioned on Anopheles atroparvus
 #storing input data in newdata
 newdata <- list(xdata = test_gj, ydataCond = y_test[,2], nsim = 200) # conditionally predict out-of-sample
 #Doing the actual prediction
-p_cp      <- gjamPredict(output = joint, newdata = newdata)
+p_cp      <- gjamPredict(output = joint2, newdata = newdata)
 
 #Anopheles atroparvus conditioned on Culex perexiguus 
 #preparing newdata
 newdata <- list(xdata = test_gj, ydataCond = y_test[,1], nsim = 200) # conditionally predict out-of-sample
 #Doing the actual prediction
-p_at     <- gjamPredict(output = joint, newdata = newdata)
+p_at     <- gjamPredict(output = joint2, newdata = newdata)
 ###Model Performance Evaluation with AUC
 #For Culex Perexiguus
 perf_cp_gj <- auc(response = test$Cxperpre, predictor = p_cp$prPresent[,1])
 perf_cp_gj
-# The AUC is with .78 slightly better than for the univariate case (.74)
+# The AUC is with .77 slightly worse than for the simple model (.78)
 
 #For Anopheles atroparvus
 perf_at_gj <- auc(response = test$Anatropre, predictor = p_at$prPresent[,2])
 perf_at_gj
-#The AUC is with .79 slightly better than for the univariate case (.77)
-#Overall, I feel like the improvement is not very significant.
+#The AUC is with .8 slightly better than for the simple model (.79)
+#Overall, there are improvements.
 
 ####plot GJAM-Predictions against the univariate probit predictions
 
@@ -198,15 +217,7 @@ provsgj_cp <- ggplot(d_gg_cp, aes(x=cp_pr, y=cp_gj, color=factor(at), shape = fa
   xlab("Predictions from Univariate Probit ") + ylab("Conditional Predictions from GJAM") +
   labs( color = "PA of Anopheles Atroparvus", shape = "PA of Culex Perexiguus")
 provsgj_cp
-#You can see that there is a positive linear relationship between the predictions
-#of the two models grouped by the PA of Anopheles Atroparvus (the species we conditioned on). This indicates
-#that both models roughly do the same/environmental signals are treated similarily.
-#The slopes of the two lines are not equal to 1 (Would we expect this? I think, we do, if we 
-#assume that the environmental coefficients are the same). You can see that the conditioning on 
-#Anapheles Atroparvus has a clear effect (The blue and red points form two distinct groups)
-#on the predictions in GJAM compared to the univariate predictions. GJAM predicts a roughly 37 % points
-#higher probability of occurence for plots where Anopheles Atroparvus is present compared to
-#plots where it's absent.
+#It looks roughly the same as in the simple model, but details are different of distribution are different
 
 #for Anopheles Atroparvus
 d_gg_at <- data.frame(cbind(pred_exp_at_sin, p_at$prPresent[,2], p_at$prPresent[,1], y_test$Anatropre))
