@@ -92,26 +92,62 @@ plot(test)
 #We see tht residuals are for both posible predictions roughly the same
 
 #Plot residuals against all covariates
-plotResiduals(test, train$Mes)
-plotResiduals(test, train$IA_500)
-plotResiduals(test, train$NDVIBEF_500)
-plotResiduals(test, train$NDVIBEF_2000)
+plotResiduals(test, train$Mes) #looks good >> no identication of quadratic effects
+plotResiduals(test, train$IA_500) #looks ok, no significant problems, but for .25 quantile
+#no flat line >> could be indication of quadratic effect
+plotResiduals(test, train$NDVIBEF_500)#looks ok, no significant problems >> but also not 
+#straight lines
+plotResiduals(test, train$NDVIBEF_2000)#looks ok, no significant problems >> but also not 
+#straight lines
+#Ergo, quadratic terms might help???? Maybe compare it with the quadratic model?
+#I mean the lines will never be super straight for all cases right?
 
 
 hist(test)
 #looks pretty flat >> thumbs up! 
 
+#different statistical tests
+testUniformity(test) #probably not necessary
+testOutliers(test) # I think this test does not make sense bc it depends on the # of
+# simulations, we have a lot >> no outliers
+testDispersion(test) # YOu should do this
 #Calculating the residuals for both models
+#guck dir alle Tests aus dem einen Teil in der Vignette nochmal an
 
-cp_res <- simulateResiduals(fittedModel = fit_cp, plot = T)
+#Residuals per month / testing temporal correlations
+test_month = recalculateResiduals(test, group = train$Mes)
+plot(test_month)
+#There seem to be some problems (as expected...)>> Mhmhm, I am a little confused,
+#but wouldnt we expect the observed scaled residuals to be .5, because we aggregate
+#over the groups and on average we expect .5????
+hist(test_month)
+##Test for temporal autocorrelation
+test_auto = recalculateResiduals(test, group = train$Fecha)
+plot(test_auto)
+testTemporalAutocorrelation(test_auto, time =  unique(train$Fecha))
+#does not seem to be a problem
 
-class(fit_cp)
+#Spatial Autocorrelation
+#Reading in the spatial coordinates of the different trap locations
+coords <- read_excel("Traps_coordenadas_geograficas.xls")
 
-testDispersion(fit_cp)
+#Trap and Area mean the same thing, so we change the name in df from "area" to "trap"
+names(df)[names(df)=="Area"] <- "trap"
+#Canada is spelt differently, so I change the spelling in df to "Cañada"
+df[,"trap"] <- lapply(df[,"trap"], gsub, pattern = "Ca?da", replacement = "Cañada", fixed = TRUE)
 
-fit_cp$
+#adding lon-lat column to the data frame df
+df_new <- merge(df, coords[, c("trap", "Norte", "Oeste")], by="trap", all.x= T)
+#I do not have the coordinates for trap "M29" --> one NA in the coordinates >> We need to remove that row
+df_new <- df_new[!is.na(df_new$Norte),]
 
-
+#Define the train set with coordinates
+train <- df_new[train_id, ]
+test_spatial <- recalculateResiduals(test, group = train$trap)
+testSpatialAutocorrelation(test_spatial, 
+                           x =  aggregate(train$Oeste, list(train$trap), mean)$x, 
+                           y = aggregate(train$Norte, list(train$trap), mean)$x)
+#No spatial autocorrelation >> Yeah!
 ####Fitting a joint model of both species with GJAM
 
 #Define the model settings
