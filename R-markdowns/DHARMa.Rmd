@@ -1,0 +1,147 @@
+---
+title: "Model Checking - Analysis of Residuals with DHARMa"
+author: "Jakob Lagenbacher"
+date: "1 7 2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Scaled Residuals and Misspecifications of the Model
+
+In the following, I analyze the residuals of my different models, in order to check whether I used “correct” models for my data. The main goal is to identify misspecifications of the model. I use the R-package “DHARMa”. This package relies on so-called “scaled-residuals”.\
+
+These are calculated in a three-step procedure.\
+
+(i)	 DHARMa simulates fitted y-values from our already fitted model with the covariates of the observations. So, for every observation we estimate “nsim”-times y-values. As a result, I have a distribution of fitted y values for every observation.\ 
+(ii)	DHARMa calculates the empirical cumulative density functions for these values. This function describes the observed values and their probability at the covariate combination, assuming the fitted model is correct.\
+
+(iii)	DHARMa takes the value of the cumulative density function at the observed y-value as the scaled residual.\
+
+A scaled residual of .5 means that half the simulated values are larger than the observed y-value. A scaled residual of 1 means that none of the simulated values is larger than the observed y-value. In the following statistical tests concerning misspecifications, DHARMa makes us of the fact that the distribution of the scaled residuals is asymptotically expected to be uniform provided the model is correctly specified (Dunn). So, we test whether the scaled residuals are uniformly distributed and if this is very unlikely we conclude that the model is misspecified.
+
+
+```{r include=FALSE}
+setwd("C:\\Users\\Jakob\\Documents\\Uni\\GCE\\Thesis\\Abundance\\Modellieren\\JakobMasterarbeit\\Data")
+#loading packages
+library(readxl) #to read in the data
+library(rstanarm) #Doing Bayesian probit GLMs for single species
+library(pROC) #calculating the AUC
+library(gjam) #Doing the joint estimation with the GJAM modelling aproach
+library(ggplot2) #for plotting
+library(DHARMa) # for checking in-sample validity of the models
+library(dplyr)
+####Data Preperation
+
+#read in the data (Monthly species PA data for seven different mosquito species
+#and according environmental covariates)
+df <- read_excel("MonthlyData.xlsx")
+str(df)
+summary(df$Fecha) # Dates in 2006 dont make any sense. I assume that they put by accident 
+#2006 instead of 2010. So I change these dates
+df$Fecha <- as.POSIXct(sub("2006", "2010", df$Fecha))
+#We ignore An_atroparvus, because it does not seem to be PA-data.
+#It looks like abundance data
+
+#extract the PA data for all species
+spec <- df[,7:14]
+#deleting the An_atroparvus column
+spec[,"An_atroparvus"] <- NULL
+#To select two species for a first analysis, we look for species that roughly occur in 50%
+#of the observations.
+summary(spec)
+#Hence, we select Cxperpre and Anatropre for our first analysis:
+y <- spec[,c("Cxperpre", "Anatropre")]
+#For these two species, Roiz et al. use the following covariates to explain their 
+#monthly PAs: Inundation area (500 m buffer), NDVI (500 m buffer), Inundation area (2000 m)
+#and NDVI month before (2000 m buffer). Since NDVI 500 m buffer and NDVI 2000 m buffer
+#will be highly correlated, I will leave out NDVI 2000 m buffer.
+
+#Transform "Mes" (month when record was taken) into a factor variable
+df$Mes <- as.factor(df$Mes)
+
+#Split the data set in training (70 %) and test (30%) set
+train_size <- floor(0.7 * nrow(y))
+#set a random seed for replicability
+set.seed(333)
+#sample the training IDs
+train_id <- sample(seq_len(nrow(y)), size = train_size)
+
+#partition data into train and test set
+train <- df[train_id, ]
+test <- df[-train_id, ]
+```
+## Univariate Probit Models to Check
+
+I fitted two models with Rstanarm. One with the PA of Culex perexiguus as the dependent variable and Inundation area (500 m buffer), NDVI (500 m buffer) as well as NDVI month before (2000 m buffer) as covariates. Antoher one with PA of Anopheles troparvus as the dependent variable and the same covariates.
+
+```{r message=FALSE, results='hide'}
+fit_cp <- stan_glm(Cxperpre ~ IA_500 + NDVI_500 + NDVIBEF_2000 + Mes, data = train, family = binomial(link = "probit"), seed = 333)
+fit_at <- stan_glm(Anatropre ~ IA_500 + NDVI_500 + NDVIBEF_2000 + Mes, data = train, family = binomial(link = "probit"), seed = 333)
+```
+### Analysis with DHARMa
+
+First, I have to create a DHARMAa object. This object contains the scaled residuals. For this, I specify the following arguments:
+1. 4000 simulations of fitted responses per observation(simulated response), 2. the observed responses (observedResponse), 3. the median of the 4000 simulated fitted responses which is the "expected" value of the predicted y of an observation (fittedPredictedResponse) and other arguments concerning the specific handling of the "scaled residuals".
+
+```{r message=FALSE, results='hide'}
+dharm_cp <- createDHARMa(simulatedResponse = t(posterior_predict(fit_cp)), observedResponse = fit_cp$y, fittedPredictedResponse = posterior_predict(fit_cp) %>% apply(2, median), integerResponse = T, seed = 123, method = "PIT")
+```
+
+##Uniform Scaled Residuals
+
+The package provides one simple plot that summarizes all important checks of the residuals.
+
+```{r echo=FALSE}
+plotQQunif(dharm_cp)
+un_cp <- testUniformity(dharm_cp)
+```
+
+
+In the QQ-plot, we can eye-ball whether the scaled residuals are distributed as we would expect if the model is correctly specified. Thus, we expect the points to be on the identity line. This is the case and hence this supports the view that the model is correctly specified. Moreover, the plot gives us the results of three tests: (i) uniformity test, (ii) dispersion test and (iii) an outlier test. The latter two are not very meaningful in our setting. The dispersion test most likely will not be significant, because there is not much dispersion in 0-1 data (see Vignette). The outlier test depends on the number of simulations, because an outlier is a scaled residual of an observation that is outside the range of simulated residuals. Since I chose a large number of simulations, it is very unlikely that an observed residuals falls outside of this range. The uniformity test is a Kolmogorov-Smirnow test which tests whether the scaled residuals are drawn from a uniform distribution between 0 and 1. In this case p = `r un_cp$p.value` and thus we can maintain our 0-hypothesis that the residuals are uniformly distributed and that our model is correctly specified. 
+
+The histogramm of the residuals gives additional support.
+
+```{r echo=FALSE}
+hist(dharm_cp)
+```
+
+## Residuals and Covariates
+
+To identify misspecifications, such as mistakenly treating a covariance-response relationship as linear and not quatratic, checking the relationship between residuals and covarites can be very informative. Moreover, checking this relationship might, also, reveal problems of heteroscedasticity and missing values. The following plots show the residuals against every covariate (pred on the x-axis). Moreover, quantile regressions are performed. Under a correctly specified model, we would expect, the regression lines to be straight lines with 0 slope at the respective quantiles (.25, .5 and .75). The reason is that we expect that the value of the covariate does not have an influence on the residuals. 
+
+```{r echo=FALSE}
+plotResiduals(dharm_cp, train$Mes) 
+plotResiduals(dharm_cp, train$IA_500) 
+plotResiduals(dharm_cp, train$NDVIBEF_500)
+plotResiduals(dharm_cp, train$NDVIBEF_2000)
+```
+
+For all 4 covariates, no significant problems were detected which supports the 0-hypothesis that we specified the functional relationships of the covariates correctly.
+
+QUESTION: For some e.g. NDVIBEF_2000 the residuals seem to follow a quadratic form with respect to the NDVIBEF_2000. Is this an indication that there is a quadratic relationship?? I mean, it is not significant, but the relationship probably must be very strong in order to be significant...
+
+## Temporal Autocorrelation
+
+Temporal Autocorrelation in the residuals is a special case of dependent observations. I will test it in the following. For this, I need to recalculate the residuals according to the date of the observation. For observations on the same date, the average of the residuals will be taken as the residual for that date. This way we have a unique set of dates for which a test for temporal correlation can be run.
+```{r}
+dharm_cp_auto <- recalculateResiduals(dharm_cp, group = train$Fecha)
+```
+Running a Durbin-Watson test for temporal autocorrelation which tests autocorrelation at lag 1 yields an insignificant p-value:
+```{r}
+testTemporalAutocorrelation(dharm_cp_auto, time =  unique(train$Fecha))
+```
+Considering the AFC-plot, we see that at a lag of 8, there is significant temporal autocorrelation. This, however, isn't very concerning, since for 17-tested lags, the expected number of significant (.05-level) lags is almost 1 under the assumption that there is no autocorrelation. Overall, there is no evidence for temporal autocorrelation in our residuals which supports the view that the model is correctly specified.
+
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.

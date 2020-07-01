@@ -14,6 +14,10 @@ library(dplyr)
 #and according environmental covariates)
 df <- read_excel("MonthlyData.xlsx")
 str(df)
+summary(df$Fecha) # Dates in 2006 dont make any sense. I assume that they put by accident 
+#2006 instead of 2010. So I change these dates
+df$Fecha <- as.POSIXct(sub("2006", "2010", df$Fecha))
+
 #We ignore An_atroparvus, because it does not seem to be PA-data.
 #It looks like abundance data
 
@@ -73,10 +77,10 @@ summary(fit_at)
 # 3. the median of the 4000 simulated fitted responses which is the "expected" 
 #value of the predicted y of an observation (fittedPredictedResponse),
 #and other arguments concerning the specific handling of the "scaled residuals".
-test <- createDHARMa(simulatedResponse = t(posterior_predict(fit_cp)), observedResponse = fit_cp$y,
+dharm_cp <- createDHARMa(simulatedResponse = t(posterior_predict(fit_cp)), observedResponse = fit_cp$y,
              fittedPredictedResponse = posterior_predict(fit_cp) %>% apply(2, median), integerResponse = T, seed = 123,
              method = "PIT")
-plot(test)
+plotQQunif(dharm_cp)
 #QQPLOT:
 #Goal: Detect deviations from the expected distribution (here: uniform distribution)
 #Here: looks like the observed distribution matches the expected distribution >> model
@@ -92,40 +96,42 @@ plot(test)
 #We see tht residuals are for both posible predictions roughly the same
 
 #Plot residuals against all covariates
-plotResiduals(test, train$Mes) #looks good >> no identication of quadratic effects
-plotResiduals(test, train$IA_500) #looks ok, no significant problems, but for .25 quantile
+plotResiduals(dharm_cp, train$Mes) #looks good >> no identication of quadratic effects
+plotResiduals(dharm_cp, train$IA_500) #looks ok, no significant problems, but for .25 quantile
 #no flat line >> could be indication of quadratic effect
-plotResiduals(test, train$NDVIBEF_500)#looks ok, no significant problems >> but also not 
+plotResiduals(dharm_cp, train$NDVIBEF_500)#looks ok, no significant problems >> but also not 
 #straight lines
-plotResiduals(test, train$NDVIBEF_2000)#looks ok, no significant problems >> but also not 
+plotResiduals(dharm_cp, train$NDVIBEF_2000)#looks ok, no significant problems >> but also not 
 #straight lines
 #Ergo, quadratic terms might help???? Maybe compare it with the quadratic model?
 #I mean the lines will never be super straight for all cases right?
 
 
-hist(test)
+hist(dharm_cp)
 #looks pretty flat >> thumbs up! 
 
 #different statistical tests
-testUniformity(test) #probably not necessary
-testOutliers(test) # I think this test does not make sense bc it depends on the # of
+p <- testUniformity(dharm_cp)
+p$p.value
+#probably not necessary
+testOutliers(dharm_cp) # I think this test does not make sense bc it depends on the # of
 # simulations, we have a lot >> no outliers
-testDispersion(test) # YOu should do this
+testDispersion(dharm_cp) # YOu should do this
 #Calculating the residuals for both models
 #guck dir alle Tests aus dem einen Teil in der Vignette nochmal an
 
 #Residuals per month / testing temporal correlations
-test_month = recalculateResiduals(test, group = train$Mes)
-plot(test_month)
+dharm_cp_month = recalculateResiduals(dharm_cp, group = train$Mes)
+plot(dharm_cp_month)
 #There seem to be some problems (as expected...)>> Mhmhm, I am a little confused,
 #but wouldnt we expect the observed scaled residuals to be .5, because we aggregate
 #over the groups and on average we expect .5????
-hist(test_month)
+hist(dharm_cp_month)
 ##Test for temporal autocorrelation
-test_auto = recalculateResiduals(test, group = train$Fecha)
-plot(test_auto)
-testTemporalAutocorrelation(test_auto, time =  unique(train$Fecha))
-#does not seem to be a problem
+dharm_cp_auto = recalculateResiduals(dharm_cp, group = train$Fecha)
+plot(dharm_cp_auto)
+testTemporalAutocorrelation(dharm_cp_auto, time =  unique(train$Fecha))
+#does  seem to be a problem
 
 #Spatial Autocorrelation
 #Reading in the spatial coordinates of the different trap locations
@@ -143,8 +149,8 @@ df_new <- df_new[!is.na(df_new$Norte),]
 
 #Define the train set with coordinates
 train <- df_new[train_id, ]
-test_spatial <- recalculateResiduals(test, group = train$trap)
-testSpatialAutocorrelation(test_spatial, 
+dharm_cp_spatial <- recalculateResiduals(dharm_cp, group = train$trap)
+testSpatialAutocorrelation(dharm_cp_spatial, 
                            x =  aggregate(train$Oeste, list(train$trap), mean)$x, 
                            y = aggregate(train$Norte, list(train$trap), mean)$x)
 #No spatial autocorrelation >> Yeah!
@@ -179,7 +185,7 @@ ml   <- list(ng = 2000, burnin = 100, typeNames = types)
 #runnig GJAM
 joint <- gjam(~ IA_500 + NDVI_500 + NDVIBEF_2000 + Agosto + Julio +Junio + Mayo + Septiembre, ydata = y_train, xdata = train, modelList = ml)
 summary(joint)
-
+joint$fit
 #Residual Correlations between the species
 joint$parameters$corMu 
 #is corMu actually the residual correlation? How do you calculate that?
