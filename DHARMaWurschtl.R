@@ -18,6 +18,17 @@ summary(df$Fecha) # Dates in 2006 dont make any sense. I assume that they put by
 #2006 instead of 2010. So I change these dates
 df$Fecha <- as.POSIXct(sub("2006", "2010", df$Fecha))
 
+#Reading in the spatial coordinates of the different trap locations
+coords <- read_excel("Traps_coordenadas_geograficas.xls")
+
+#Trap and Area mean the same thing, so we change the name in df from "area" to "trap"
+names(df)[names(df)=="Area"] <- "trap"
+#Canada is spelt differently, so I change the spelling in df to "Cañada"
+df[,"trap"] <- lapply(df[,"trap"], gsub, pattern = "Ca?da", replacement = "Cañada", fixed = TRUE)
+
+#adding lon-lat column to the data frame df
+df_spat <- merge(df, coords[, c("trap", "Norte", "Oeste")], by="trap", all.x= T, sort = F)
+
 #We ignore An_atroparvus, because it does not seem to be PA-data.
 #It looks like abundance data
 
@@ -129,21 +140,11 @@ testTemporalAutocorrelation(dharm_cp_auto, time =  unique(train$Fecha))
 #does  seem to be a problem
 
 #Spatial Autocorrelation
-#Reading in the spatial coordinates of the different trap locations
-coords <- read_excel("Traps_coordenadas_geograficas.xls")
-
-#Trap and Area mean the same thing, so we change the name in df from "area" to "trap"
-names(df)[names(df)=="Area"] <- "trap"
-#Canada is spelt differently, so I change the spelling in df to "Cañada"
-df[,"trap"] <- lapply(df[,"trap"], gsub, pattern = "Ca?da", replacement = "Cañada", fixed = TRUE)
-
-#adding lon-lat column to the data frame df
-df_new <- merge(df, coords[, c("trap", "Norte", "Oeste")], by="trap", all.x= T)
+#defining the training set with coordinates
+train <- df_spat[train_id,]
 #I do not have the coordinates for trap "M29" --> one NA in the coordinates >> We need to remove that row
-df_new <- df_new[!is.na(df_new$Norte),]
-
-#Define the train set with coordinates
-train <- df_new[train_id, ]
+train <- train[!is.na(train$Norte),]
+dim(train)
 dharm_cp_spatial <- recalculateResiduals(dharm_cp, group = train$trap)
 testSpatialAutocorrelation(dharm_cp_spatial, 
                            x =  aggregate(train$Oeste, list(train$trap), mean)$x, 
@@ -215,9 +216,9 @@ summary(joint)
 #Prepare a newdata object for the gjam-posterior predictions
 #add intercept to train data (for some reason we need to this, otherwise gjamPredict
 #won't accept it as xdata)
-train$intercept <- rep(1 , nrow(train)) #adding the intercept
+train_gj$intercept <- rep(1 , nrow(train)) #adding the intercept
 train_gj <- train_gj[,c("intercept", "IA_500", "NDVI_500", "NDVIBEF_2000", "Agosto",
-                     "Julio", "Junio", "Mayo", "Septiembre", "Fecha")], "Norte", "Oeste")] # getting rid of all the unused variables
+                     "Julio", "Junio", "Mayo", "Septiembre", "Fecha", "trap")] # getting rid of all the unused variables
 
 newdata <- list(xdata = train_gj, nsim = 4000)
 #calculating the in-sample predictions (simulations)
@@ -247,19 +248,31 @@ dharm_gj_un_auto <- recalculateResiduals(dharm_gj_un, group =
                                            append(train_gj$Fecha, train_gj$Fecha, 
                                                   after = length(train_gj$Fecha)))
 plot(dharm_gj_un_auto)
-testTemporalAutocorrelation(dharm_cp_auto, time =  unique(train$Fecha))
+testTemporalAutocorrelation(dharm_gj_un_auto, time =  unique(train$Fecha))
 #does  seem to be a problem
 
 #Spatial Autocorrelation
-
-dharm_gj_un_spatial <- recalculateResiduals(dharm_gj_un, group = train$trap)
-testSpatialAutocorrelation(dharm_cp_spatial, 
-                           x =  aggregate(train$Oeste, list(train$trap), mean)$x, 
-                           y = aggregate(train$Norte, list(train$trap), mean)$x)
 #No spatial autocorrelation >> Yeah!
 
+#####Spatial Autocorrelation
 
-######################################
+#adding lon-lat column to the training data
+train_gj_spat <- merge(train_gj, coords[, c("trap", "Norte", "Oeste")], by="trap", sort =F)
+
+dharm_gj_spatial <- recalculateResiduals(dharm_gj_un, group = append(train$trap, train$trap, 
+                                                                     after = length(train$trap)))
+testSpatialAutocorrelation(dharm_gj_spatial, 
+                           x =  aggregate(append(train_gj_spat$Oeste, train_gj_spat$Oeste, after = length(train_gj_spat$Oeste)),
+                                          list(append(train_gj_spat$trap, train_gj_spat$trap, after = length(train_gj_spat$trap)), mean)$x), 
+                           y = aggregate(append(train_gj_spat$Norte, train_gj_spat$Norte, after = length(train_gj_spat$Norte)),
+                                                  list(append(train_gj_spat$trap, train_gj_spat$trap, after = length(train_gj_spat$trap)), mean)$x)
+#Das ist doch schrecklich, schreib den Code wieder nochmal sauberer von vorne: Kotz Kotz: Musst Dir was ausdenken mit dem ich haue meine 
+#meine zwei abhängigen Variablen zusammen >> mach vielleicht einen Dataframe draus oder so!!!
+                           
+    #############
+
+
+#########################
 #Residual Correlations between the species
 joint$parameters$corMu 
 #is corMu actually the residual correlation? How do you calculate that?
