@@ -83,7 +83,7 @@ dharm_cp <- createDHARMa(simulatedResponse = t(posterior_predict(fit_cp)), obser
                          fittedPredictedResponse = posterior_predict(fit_cp) %>% apply(2, median), integerResponse = T, seed = 123,
                          method = "PIT")
 #Why does posterior_predict product 0-1 values? Shouldn't it be the fitted y-values? 
-plotQQunif(dharm_cp)
+plotQQunif(ash)
 plot(dharm_cp)
 #QQPLOT:
 #Goal: Detect deviations from the expected distribution (here: uniform distribution)

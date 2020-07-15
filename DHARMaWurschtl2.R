@@ -25,12 +25,6 @@ names(df)[names(df)=="Area"] <- "trap"
 #Canada is spelt differently, so I change the spelling in df to "Cañada"
 df[,"trap"] <- lapply(df[,"trap"], gsub, pattern = "Ca?da", replacement = "Cañada", fixed = TRUE)
 
-#adding lon-lat column to the data frame df
-df <- merge(df, coords[, c("trap", "Norte", "Oeste")], by="trap", all.x= T, sort = F)
-
-#We ignore An_atroparvus, because it does not seem to be PA-data.
-#It looks like abundance data
-
 #extract the PA data for all species
 spec <- df[,7:14]
 #deleting the An_atroparvus column
@@ -44,6 +38,13 @@ y <- spec[,c("Cxperpre", "Anatropre")]
 #monthly PAs: Inundation area (500 m buffer), NDVI (500 m buffer), Inundation area (2000 m)
 #and NDVI month before (2000 m buffer). Since NDVI 500 m buffer and NDVI 2000 m buffer
 #will be highly correlated, I will leave out NDVI 2000 m buffer.
+
+#adding lon-lat column to the data frame df
+df <- merge(df, coords[, c("trap", "Norte", "Oeste")], by="trap", all.x= T, sort = F)
+
+#We ignore An_atroparvus, because it does not seem to be PA-data.
+#It looks like abundance data
+
 
 #Transform "Mes" (month when record was taken) into a factor variable
 df$Mes <- factor(df$Mes, levels =c("Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre"))
@@ -82,6 +83,8 @@ summary(fit_at)
 dharm_cp <- createDHARMa(simulatedResponse = t(posterior_predict(fit_cp)), observedResponse = fit_cp$y,
              fittedPredictedResponse = posterior_predict(fit_cp) %>% apply(2, median), integerResponse = T, seed = 123,
              method = "PIT")
+
+dharm_cp <- createDHARMa(simulatedResponse = t(posterior_predict(fit_cp)), observedResponse = fit_cp$y, fittedPredictedResponse = posterior_predict(fit_cp) %>% apply(2, median), integerResponse = T, seed = 123, method = "PIT")
 #Why does posterior_predict product 0-1 values? Shouldn't it be the fitted y-values? 
 plotQQunif(dharm_cp)
 plot(dharm_cp)
@@ -317,8 +320,19 @@ testSpatialAutocorrelation(dharm_gj_spatial,
                            y = aggregate(append(train_gj$Norte, train_gj$Norte, after = length(train_gj$Norte)),
                                                   list(append(train_gj$trap, train_gj$trap, after = length(train_gj$trap))), mean)$x)
 
-                           
-    #############
+                          
+#############DHARMA with Conditional Prediction of GJAM
+#For CP (conditioning on at)
+
+newdata <- list(ydataCond = y_train[,2], nsim = 4000)
+sim_cp <- gjamPredict(output = joint, newdata = newdata)
+sims_cp <- ifelse(sim_cp$ychains>.5, 1, 0)
+dharm_gj_cp <- createDHARMa(simulatedResponse = t(sims_cp[,1:325]),
+                            observedResponse = fit_cp$y,
+                            fittedPredictedResponse = sim$prPresent[,1],
+                            integerResponse = T, seed = 123,method = "PIT")
+
+plot(dharm_gj_cp)
 
 
 #########################
@@ -394,6 +408,7 @@ p_cp      <- gjamPredict(output = joint, newdata = newdata)
 #Anopheles atroparvus conditioned on Culex perexiguus 
 #preparing newdata
 newdata <- list(xdata = test_gj, ydataCond = y_test[,1], nsim = 200) # conditionally predict out-of-sample
+#maybe write ycondData instead of ydataCond
 #Doing the actual prediction
 p_at     <- gjamPredict(output = joint, newdata = newdata)
 ###Model Performance Evaluation with AUC
