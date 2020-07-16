@@ -80,7 +80,7 @@ summary(fit_at)
 #value of the predicted y of an observation (fittedPredictedResponse),
 #and other arguments concerning the specific handling of the "scaled residuals".
 dharm_cp <- createDHARMa(simulatedResponse = t(posterior_predict(fit_cp)), observedResponse = fit_cp$y,
-                         fittedPredictedResponse = posterior_predict(fit_cp) %>% apply(2, median), integerResponse = T, seed = 123,
+                         fittedPredictedResponse = posterior_predict(fit_cp) %>% apply(2, median), integerResponse = T, seed = 333,
                          method = "PIT")
 #Why does posterior_predict product 0-1 values? Shouldn't it be the fitted y-values? 
 plotQQunif(ash)
@@ -143,7 +143,7 @@ testSpatialAutocorrelation(dharm_cp_spatial,
 ###########DHARMA for anopheles
 
 dharm_at <- createDHARMa(simulatedResponse = t(posterior_predict(fit_at)), observedResponse = fit_at$y,
-                         fittedPredictedResponse = posterior_predict(fit_at) %>% apply(2, median), integerResponse = T, seed = 123,
+                         fittedPredictedResponse = posterior_predict(fit_at) %>% apply(2, median), integerResponse = T, seed = 333,
                          method = "PIT")
 #Why does posterior_predict product 0-1 values? Shouldn't it be the fitted y-values? 
 plotQQunif(dharm_at)
@@ -285,7 +285,7 @@ dharm_gj_un <- createDHARMa(simulatedResponse = t(sims),
                             observedResponse = append(fit_cp$y, fit_at$y, after = length(fit_cp$y)),
                             fittedPredictedResponse = append(sim$prPresent[,1], sim$prPresent[,2],
                                                              after = length(sim$prPresent[,1])),
-                            integerResponse = T, seed = 123,method = "PIT")
+                            integerResponse = T, seed = 333,method = "PIT")
 
 plot(dharm_gj_un)
 #looks pretty good
@@ -321,4 +321,15 @@ testSpatialAutocorrelation(dharm_gj_spatial,
                                          list(rep(train_gj$trap, 2)), mean)$x)
 
 
-#############
+#############DHARMA with Conditional Prediction of GJAM
+#For CP (conditioning on at)
+
+newdata <- list(ydataCond = y_train[,2], nsim = 4000)
+sim_cp <- gjamPredict(output = joint, newdata = newdata)
+sims_cp <- ifelse(sim_cp$ychains>.5, 1, 0)
+dharm_gj_cp <- createDHARMa(simulatedResponse = t(sims_cp[,1:325]),
+                            observedResponse = fit_cp$y,
+                            fittedPredictedResponse = sim$prPresent[,1],
+                            integerResponse = T, seed = 123,method = "PIT")
+
+plot(dharm_gj_cp)
