@@ -90,7 +90,6 @@ ml   <- list(ng = 2000, burnin = 100, typeNames = types)
 #runnig GJAM
 joint <- gjam(~ IA_500 + NDVI_500 + NDVIBEF_2000, ydata = y_train, xdata = train, modelList = ml)
 summary(joint)
-
 #Residual Correlations between the species
 joint$parameters$corMu 
 #is corMu actually the residual correlation? How do you calculate that?

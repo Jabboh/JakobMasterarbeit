@@ -81,10 +81,10 @@ perf_cp_sin <- auc(response = test$Cxperpre, predictor = pred_exp_cp_sin)
 perf_cp_sin
 #AUC = .76 >> seems ok for our purposes (remember: our goal is not to find the perfect
 #model for our data, but rather evaluate whether knowing one species helps our predictions
-#of the other one
+#of the other one. It is .03 better than in the model with the month-dummies
 perf_at_sin <- auc(response = test$Anatropre, predictor = pred_exp_at_sin)
 perf_at_sin
-#AUC = .9 >> seems pretty good for our purposes
+#AUC = .9 >> seems pretty good for our purposes (.12 better than in original analysis)
 
 ####Fitting a joint model of both species with GJAM
 
