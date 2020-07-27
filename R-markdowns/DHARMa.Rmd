@@ -159,5 +159,5 @@ testSpatialAutocorrelation(dharm_cp_spatial,
                            x =  aggregate(train$Oeste, list(train$trap), mean)$x, 
                            y = aggregate(train$Norte, list(train$trap), mean)$x)
 ```
-The Moran's I test for spatial autocorrelation is not significant. Thus, I stick to the 0-hypothesis that there is no spatial autocorrelation.
+The Moran's I test for spatial autocorrelation is not significant. Thus, I stick to the 0-hypothesis that there is no spatial autocorrelation.f
 
