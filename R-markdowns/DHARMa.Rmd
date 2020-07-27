@@ -15,7 +15,7 @@ In the following, I analyze the residuals of my different models, in order to ch
 
 These are calculated in a three-step procedure.\
 
-(i)	 DHARMa simulates  y-values from our already fitted model with the covariates of the observations. So, for every observation we estimate “nsim”-times y-values. As a result, I have a distribution of fitted y values for every observation.\ 
+(i)	 DHARMa simulates  y-values from our already fitted model with the covariates of the observations. So, for every observation we estimate “nsim”-times y-values. As a result, I have a distribution of simulated y values for every observation.\ 
 
 (ii)	DHARMa calculates the empirical cumulative density functions for every observation. This function describes the observed values and their probability at the covariate combination, assuming the fitted model is correct.\
 
@@ -90,7 +90,7 @@ test <- df[-train_id, ]
 I fitted two models with Rstanarm. One with the PA of Culex perexiguus as the dependent variable and Inundation area (500 m buffer), NDVI (500 m buffer) as well as NDVI month before (2000 m buffer) as covariates. Antoher one with PA of Anopheles troparvus as the dependent variable and the same covariates.
 
 Then, I  create a DHARMAa object. This object contains the scaled residuals. For this, I specify the following arguments:
-1. 4000 simulations of fitted responses per observation(simulated response), 2. the observed responses (observedResponse), 3. the median of the 4000 simulated fitted responses which is the "expected" value of the predicted y of an observation (fittedPredictedResponse) and other arguments concerning the specific handling of the "scaled residuals".
+1. 4000 simulations of responses per observation(simulated response), 2. the observed responses (observedResponse), 3. the median of the 4000 simulated responses which is the "expected" value of the predicted y of an observation (fittedPredictedResponse) and other arguments concerning the specific handling of the "scaled residuals".
 
 ```{r message=FALSE, results='hide'}
 #fitting the model for Culex perexiguus
