@@ -123,3 +123,5 @@ pos <- position_nudge(y = ifelse(combined$model == "Multivariate Model", 0, 0.1)
 ggplot(combined, aes(x = m, y = parameter, color = model)) + 
   geom_point(position = pos) +
   geom_linerange(aes(xmin = ll, xmax = hh), position = pos)
+
+#Check, ob das soweit stimmt und mach den Plot nochmal hübscher!
