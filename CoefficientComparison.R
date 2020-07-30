@@ -2,7 +2,7 @@
 #and their credibility intervals. I also want to create plots that visualize this.
 
 rm(list=ls())
-setwd("C:\\Users\\jakob\\Documents\\JakobMasterarbeit\\Data")
+setwd("C:\\Users\\Jakob\\Documents\\Uni\\GCE\\Thesis\\JakobMasterarbeit\\Data")
 #loading packages
 library(readxl) #to read in the data
 library(rstanarm) #Doing Bayesian probit GLMs for single species
@@ -113,15 +113,24 @@ joint$parameters$betaMu
 
 #This might do the trick: https://github.com/stan-dev/bayesplot/issues/232
 #The posteriors of both models
-posterior_1 <- as.matrix(fit_cp)
-posterior_2 <- as.matrix(joint$chains$bgibbs[,1:9])
+posterior_1 <- as.matrix(fit_cp) #rstanarm nimmt den median als Schätzer für den Parameter
+posterior_2 <- as.matrix(joint$chains$bgibbsUn[,1:9])
 colnames(posterior_2) <- colnames(posterior_1)
-combined <- rbind(mcmc_intervals_data(posterior_1), mcmc_intervals_data(posterior_2))
+combined <- rbind(mcmc_intervals_data(posterior_1, prob_outer = .975), mcmc_intervals_data(posterior_2, prob_outer = .975))
 combined$model <- rep(c("Univariate Model", "Multivariate Model"), each = ncol(posterior_1))
+#prob_outer defines the credibility interval in our plot (here .975)
 theme_set(bayesplot::theme_default())
 pos <- position_nudge(y = ifelse(combined$model == "Multivariate Model", 0, 0.1))
 ggplot(combined, aes(x = m, y = parameter, color = model)) + 
   geom_point(position = pos) +
-  geom_linerange(aes(xmin = ll, xmax = hh), position = pos)
+  geom_errorbar(aes(xmin = ll, xmax = hh), position = pos, width = .1) +
+  ggtitle("Univariate vs. Multivariate Parameters and 97.5 % - Credibility Intervals") + 
+  xlab("Value") + ylab("Parameter") + labs(color="Model") 
 
 #Check, ob das soweit stimmt und mach den Plot nochmal hübscher!
+
+mean(joint$chains$bgibbsUn[,4])
+dim(joint$chains$bgibbs)
+joint$parameters$betaMu
+joint$parameters$betaStandXmu
+str(combined)
