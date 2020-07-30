@@ -91,6 +91,7 @@ I fitted two models with Rstanarm. One with the PA of Culex perexiguus as the de
 
 Then, I  create a DHARMAa object. This object contains the scaled residuals. For this, I specify the following arguments:
 1. 4000 simulations of responses per observation(simulated response), 2. the observed responses (observedResponse), 3. the median of the 4000 simulated responses which is the "expected" value of the predicted y of an observation (fittedPredictedResponse) and other arguments concerning the specific handling of the "scaled residuals".
+Comment: The posterior_predict function from rstanarm includes the residual error in its predictions (this is important!)
 
 ```{r message=FALSE, results='hide'}
 #fitting the model for Culex perexiguus

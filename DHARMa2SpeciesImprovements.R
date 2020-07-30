@@ -279,12 +279,15 @@ sim <- gjamPredict(output = joint, newdata = newdata)
 #I am, however, a little confused how gjamPredict calculates the one-value predictions
 #(prPresent). It's pretty close to the median
 #For the above reasons I have to convert the fitted y-values to the observation scale.
-#I think, it should just be >.5 -> 1, 0 otherwise
-sims <- ifelse(sim$ychains>.5, 1, 0)
+#I think, it should just be >.5 -> 1, 0 otherwise. NO!!!! This why you ignore the
+#residual error. Hence use rbinom
+sims <- matrix(rbinom(n = length(sim$ychains),size = 1, sim$ychains),
+               nrow = nrow(sim$ychains)) 
+
 dharm_gj_un <- createDHARMa(simulatedResponse = t(sims),
                             observedResponse = append(fit_cp$y, fit_at$y, after = length(fit_cp$y)),
-                            fittedPredictedResponse = append(sim$prPresent[,1], sim$prPresent[,2],
-                                                             after = length(sim$prPresent[,1])),
+                            fittedPredictedResponse = append(sim$sdList$yMu[,1], sim$sdList$yMu[,2],
+                                                             after = length(sim$sdList$yMu[,1])),
                             integerResponse = T, seed = 333,method = "PIT")
 
 plot(dharm_gj_un)
