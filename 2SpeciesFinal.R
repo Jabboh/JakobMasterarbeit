@@ -29,6 +29,7 @@ library(ggplot2) #for plotting
 library(DHARMa) # for checking in-sample validity of the models
 library(dplyr) # for simplified syntax and neater code
 library(corrplot)
+library(loo) #to calculate WAIC
 #### 1.Data Preperation
 #read in the data (Monthly species PA data for seven different mosquito species
 #and according environmental covariates)
@@ -230,23 +231,36 @@ plot(dharm_at)
 # functional relationships correctly.
 
 #Plot residuals against all covariates
-plotResiduals(dharm_at, train$IA_500) #.25 quantile is significant
+plotResiduals(dharm_at, train$IA_500) #.25 quantile is significant + combined quantile
+#test also significant
 plotResiduals(dharm_at, train$NDVI_500)#no significant problems 
-plotResiduals(dharm_at, train$IABEF_2000)#significant problem(.25 quantile)
-plotResiduals(dharm_at, train$NDVIBEF_2000)#.25 quantile is significant
+plotResiduals(dharm_at, train$IABEF_2000)#significant problem(.25 quantile), but combined 
+#quantiles insignificant
+plotResiduals(dharm_at, train$NDVIBEF_2000)#.25 quantile is significant + combined quantile
+#test also significant
 plotResiduals(dharm_at, train$Mes) #looks good
 #the quadratic forms
-plotResiduals(dharm_at, (train$IA_500)^2) # .25 quantile is significant
-plotResiduals(dharm_at, (train$NDVI_500)^2) # .25 quantile is significant
-plotResiduals(dharm_at, (train$IABEF_2000)^2) # .25 quantile is significant
-plotResiduals(dharm_at, (train$NDVIBEF_2000)^2) # .25 quantile is significant
+plotResiduals(dharm_at, (train$IA_500)^2) # .25 quantile is significant, but combined 
+#quantile test insignificant
+plotResiduals(dharm_at, (train$NDVI_500)^2) # .25 quantile is significant + comined
+#significant
+plotResiduals(dharm_at, (train$IABEF_2000)^2) # .25 quantile is significant, but combined 
+#quantile test insignificant
+plotResiduals(dharm_at, (train$NDVIBEF_2000)^2) # .25 quantile is significant + combined
+#significant
 #the interactions
-plotResiduals(dharm_at, train$IA_500*train$NDVI_500)#.25 quantile is significant
+plotResiduals(dharm_at, train$IA_500*train$NDVI_500)#.25 quantile is significant + 
+#combined significant
 plotResiduals(dharm_at, train$IA_500*train$IABEF_2000) # .25 quantile is significant
+# + combined significant
 plotResiduals(dharm_at, train$IA_500*train$NDVIBEF_2000) # .25 quantile is significant
+#+ combined significant
 plotResiduals(dharm_at, train$NDVI_500*train$IABEF_2000) # .25 and .5 quantile is significant
-plotResiduals(dharm_at, train$NDVI_500*train$NDVIBEF_2000) # .25 is significant
-plotResiduals(dharm_at, train$IABEF_2000*train$NDVIBEF_2000)# .25 is significant
+#but combined quantile test insignificant
+plotResiduals(dharm_at, train$NDVI_500*train$NDVIBEF_2000) # .25 is significant + 
+#combined significant
+plotResiduals(dharm_at, train$IABEF_2000*train$NDVIBEF_2000)# .25 is significant +
+#combined significant
 #We have a problem, for many covariates one quantile is significant
 
 hist(dharm_at)
@@ -263,3 +277,321 @@ testSpatialAutocorrelation(dharm_at_spatial,
                            x =  aggregate(train$Oeste, list(train$trap), mean)$x, 
                            y = aggregate(train$Norte, list(train$trap), mean)$x)
 #No, spatial autocorrelation
+
+#c.gjam DHARMa-analysis
+
+#Prepare a newdata object for the gjam-posterior predictions
+
+
+
+#I need to feed the Interaction and quadratic terms directly to the predict function
+#So, I have to calculate these covariates first and store them as separate columns
+train_gjdh <- as.data.frame(poly(as.matrix(train[,c("IA_500", "NDVI_500", "IABEF_2000",
+                                      "NDVIBEF_2000")]), degree = 2, raw = T))
+
+#giving it the appropriate names
+names(train_gjdh) <- c("IA500", "I(IA500^2)", "NDVI500", "IA500:NDVI500",
+                       "I(NDVI500^2)", "IABEF2000", "IA500:IABEF2000",
+                       "NDVI500:IABEF2000", "I(IABEF2000^2)", "NDVIBEF2000",
+                       "IA500:NDVIBEF2000", "NDVI500:NDVIBEF2000", 
+                       "IABEF2000:NDVIBEF2000", "I(NDVIBEF2000^2)")
+#combining it with the other covariates
+train_gjdh <- cbind(train_gj, train_gjdh)
+
+#add intercept to train data (for some reason we need to this, otherwise gjamPredict
+#won't accept it as xdata)
+train_gjdh$intercept <- rep(1 , nrow(train)) 
+
+# getting rid of all the unused variables
+train_gjdh <- train_gjdh[,c("intercept", "IA500", "I(IA500^2)", "NDVI500", "IA500:NDVI500",
+                        "I(NDVI500^2)", "IABEF2000", "IA500:IABEF2000",
+                        "NDVI500:IABEF2000", "I(IABEF2000^2)", "NDVIBEF2000",
+                        "IA500:NDVIBEF2000", "NDVI500:NDVIBEF2000", 
+                        "IABEF2000:NDVIBEF2000", "I(NDVIBEF2000^2)", "Mayo", "Junio", "Julio",
+                        "Agosto", "Septiembre", "Fecha", "trap", "Norte", "Oeste")] 
+
+#I need to feed the Interaction and quadratic terms directly to the predict function
+#So, I have to calculate these covariates first and store them as separate columns
+
+#define the modelling setting
+newdata <- list(xdata = train_gjdh, nsim = 4000)
+#calculating the in-sample predictions (simulations)
+sim <- gjamPredict(output = joint, newdata = newdata)
+
+# The single draws from the predictive posterior are stored in ychains.
+# It gives us values in terms of probabilities (the CDF right of the origin).
+#In order to obtain simulated y-values on the observational scale that include the 
+#residual error, we must draw from a binomial distribution with the probility that we
+#drew from the predictive posterior distribution (rbinom does the job for us)
+
+sims <- matrix(rbinom(n = length(sim$ychains),size = 1, sim$ychains),
+               nrow = nrow(sim$ychains)) 
+
+#creating the DHARMa object
+dharm_gj_un <- createDHARMa(simulatedResponse = t(sims),
+                            observedResponse = append(fit_cp$y, fit_at$y, after = length(fit_cp$y)),
+                            fittedPredictedResponse = append(sim$sdList$yMu[,1], sim$sdList$yMu[,2],
+                                                             after = length(sim$sdList$yMu[,1])),
+                            integerResponse = T, seed = 333,method = "PIT")
+
+plot(dharm_gj_un)
+
+#1. QQ-plot looks good >> scaled residuals follow the expected uniform distribution
+#2. KS-test also supports our assumption that the scaled residuals are uniformly 
+#distributed >> our model is correctly specified.
+#3. Residual vs. predicted quantile deviations (significant): The scaled residuals seem to increase
+#with the predictions.
+
+#Plotting the residuals against all covariates to check whether we specified the
+# functional relationships correctly.
+
+#Plot residuals against all covariates
+plotResiduals(dharm_gj_un, rep(train$IA_500,2)) #looks ok, no significant problems
+plotResiduals(dharm_gj_un, rep(train$NDVI_500, 2))#significant problem with the .5 quantile
+#but combined quantile test is not signfificant
+plotResiduals(dharm_gj_un, rep(train$IABEF_2000, 2))#no significant problems
+plotResiduals(dharm_gj_un, rep(train$NDVIBEF_2000, 2))#significant problems for all
+#quantiles and the combined test
+plotResiduals(dharm_gj_un, rep(train$Mes, 2)) #looks good
+#the quadratic forms
+plotResiduals(dharm_gj_un, rep((train$IA_500)^2, 2)) # looks ok
+plotResiduals(dharm_gj_un, rep((train$NDVI_500)^2, 2)) # looks ok
+plotResiduals(dharm_gj_un, rep((train$IABEF_2000)^2, 2)) # looks ok
+plotResiduals(dharm_gj_un, rep((train$NDVIBEF_2000)^2, 2)) # looks ok
+#the interactions
+plotResiduals(dharm_gj_un, rep(train$IA_500*train$NDVI_500, 2))#looks ok
+plotResiduals(dharm_gj_un, rep(train$IA_500*train$IABEF_2000, 2)) # looks ok
+plotResiduals(dharm_gj_un, rep(train$IA_500*train$NDVIBEF_2000, 2)) # looks ok
+plotResiduals(dharm_gj_un, rep(train$NDVI_500*train$IABEF_2000, 2)) # looks ok
+plotResiduals(dharm_gj_un, rep(train$NDVI_500*train$NDVIBEF_2000, 2)) # looks ok
+plotResiduals(dharm_gj_un, rep(train$IABEF_2000*train$NDVIBEF_2000, 2))# no problems
+#Overall, only two plots had significant problems and for only one of them, the
+#combined test was significant . Due to the high number of plots,
+#this is somewhat  expected (we performed 15*3 = 45 significance tests >> 
+#hence we would expect roughly 2 significant plots (95%-level)) >> So, we should be
+#good! :)
+
+hist(dharm_gj_un)
+#looks pretty flat >> thumbs up!
+
+##Test for temporal autocorrelation
+dharm_gj_un_auto = recalculateResiduals(dharm_gj_un, group = rep(train_gjdh$Fecha, 2))
+testTemporalAutocorrelation(dharm_gj_un_auto, time =  unique(train_gjdh$Fecha))
+#doesn't  seem to be a problem
+
+#Spatial Autocorrelation
+
+#I do not have the coordinates for trap "M29" --> one NA in the coordinates >> We need to remove that row
+dharm_gj_un_spatial <- recalculateResiduals(dharm_gj_un,
+                                            group = rep(train_gjdh$Norte, 2))
+testSpatialAutocorrelation(dharm_gj_un_spatial, 
+                           x =  aggregate(train$Oeste, list(train$trap), mean)$x, 
+                           y = aggregate(train$Norte, list(train$trap), mean)$x)
+#No spatial autocorrelation >> Yeah!
+
+#4. Finding the "best" model
+#I proceed as follows. I drop each environmental covariate(month, NDVI, IA...) 
+#and the related terms (quadratic + interactions) separately and choose the model with
+#the highest WAIC. If this WAIC is higher than the WAIC of the complex model, I 
+#repeat the steps until the more complex model has a higher WAIC.
+
+#For CP
+waic_cp <- waic(fit_cp)
+
+#Dropping IA_500
+fit_cp1_ia <- stan_glm(Cxperpre ~ (NDVI_500 + IABEF_2000 + NDVIBEF_2000)^2 +
+                     Mes + I(NDVI_500^2) + I(IABEF_2000^2) +
+                     I(NDVIBEF_2000^2), data = train,
+                   family = binomial(link = "probit"),init_r = .7, seed = 333)
+
+waic_cp1_ia <- waic(fit_cp1_ia)
+
+fit_cp1_ndvi <- stan_glm(Cxperpre ~ (IA_500 + IABEF_2000 + NDVIBEF_2000)^2 +
+                     Mes + I(IA_500^2) + I(IABEF_2000^2) +
+                     I(NDVIBEF_2000^2), data = train,
+                   family = binomial(link = "probit"),init_r = .7, seed = 333)
+waic_cp1_ndvi <- waic(fit_cp1_ndvi)
+
+fit_cp1_iabef <- stan_glm(Cxperpre ~ (IA_500 + NDVI_500 + NDVIBEF_2000)^2 +
+                     Mes + I(IA_500^2) + I(NDVI_500^2) +
+                     I(NDVIBEF_2000^2), data = train,
+                   family = binomial(link = "probit"),init_r = .7, seed = 333)
+waic_cp1_iabef <- waic(fit_cp1_iabef)
+
+fit_cp1_ndvibef <- stan_glm(Cxperpre ~ (IA_500 + NDVI_500 + IABEF_2000)^2 +
+                     Mes + I(IA_500^2) + I(NDVI_500^2) + I(IABEF_2000^2),
+                     data = train, family = binomial(link = "probit"),init_r = .7, 
+                     seed = 333)
+waic_cp1_ndvibef <- waic(fit_cp1_ndvibef)
+
+fit_cp1_mes <- stan_glm(Cxperpre ~ (IA_500 + NDVI_500 + IABEF_2000 + NDVIBEF_2000)^2 +
+                    I(IA_500^2) + I(NDVI_500^2) + I(IABEF_2000^2) +
+                     I(NDVIBEF_2000^2), data = train,
+                   family = binomial(link = "probit"),init_r = .7, seed = 333)
+waic_cp1_mes <- waic(fit_cp1_mes)
+
+
+loo_compare(waic_cp1_ia, waic_cp1_ndvi, waic_cp1_iabef, waic_cp1_ndvibef,
+            waic_cp1_mes, waic_cp)
+#The model with the highest elpd_diff is best model >> It's the model without the month
+#terms. Hence, we remove month dummy. 
+
+#Round 2
+#Next, we work with the model without the month dummies and repeat the procedure
+waic_cp1 <- waic(fit_cp1_mes)
+
+#Dropping IA_500
+fit_cp2_ia <- stan_glm(Cxperpre ~ (NDVI_500 + IABEF_2000 + NDVIBEF_2000)^2 +
+                         I(NDVI_500^2) + I(IABEF_2000^2) +
+                         I(NDVIBEF_2000^2), data = train,
+                       family = binomial(link = "probit"),init_r = .7, seed = 333)
+
+waic_cp2_ia <- waic(fit_cp2_ia)
+
+fit_cp2_ndvi <- stan_glm(Cxperpre ~ (IA_500 + IABEF_2000 + NDVIBEF_2000)^2 +
+                           I(IA_500^2) + I(IABEF_2000^2) +
+                           I(NDVIBEF_2000^2), data = train,
+                         family = binomial(link = "probit"),init_r = .7, seed = 333)
+waic_cp2_ndvi <- waic(fit_cp2_ndvi)
+
+fit_cp2_iabef <- stan_glm(Cxperpre ~ (IA_500 + NDVI_500 + NDVIBEF_2000)^2 +
+                            I(IA_500^2) + I(NDVI_500^2) +
+                            I(NDVIBEF_2000^2), data = train,
+                          family = binomial(link = "probit"),init_r = .7, seed = 333)
+waic_cp2_iabef <- waic(fit_cp2_iabef)
+
+fit_cp2_ndvibef <- stan_glm(Cxperpre ~ (IA_500 + NDVI_500 + IABEF_2000)^2 +
+                              I(IA_500^2) + I(NDVI_500^2) + I(IABEF_2000^2),
+                            data = train, family = binomial(link = "probit"),init_r = .7, 
+                            seed = 333)
+waic_cp2_ndvibef <- waic(fit_cp2_ndvibef)
+
+#comparing the WAICs
+loo_compare(waic_cp2_ia, waic_cp2_ndvi, waic_cp2_iabef, waic_cp2_ndvibef,
+            waic_cp1)
+#The model with the highest elpd_diff is best model >> It's the model without the IA-terms
+#terms. Hence, we remove the variable IA_500 and all its associations. 
+
+#Round 3
+#Next, we work with the model without the month dummies and the IA_500 variable
+#and repeat the procedure
+waic_cp2 <- waic(fit_cp2_ia)
+
+
+fit_cp3_ndvi <- stan_glm(Cxperpre ~ (IABEF_2000 + NDVIBEF_2000)^2 +
+                           I(IA_500^2) + I(IABEF_2000^2) +
+                           I(NDVIBEF_2000^2), data = train,
+                         family = binomial(link = "probit"),init_r = .7, seed = 333)
+waic_cp3_ndvi <- waic(fit_cp3_ndvi)
+
+fit_cp3_iabef <- stan_glm(Cxperpre ~ (NDVI_500 + NDVIBEF_2000)^2 +
+                            I(IA_500^2) + I(NDVI_500^2) +
+                            I(NDVIBEF_2000^2), data = train,
+                          family = binomial(link = "probit"),init_r = .7, seed = 333)
+waic_cp3_iabef <- waic(fit_cp3_iabef)
+
+fit_cp3_ndvibef <- stan_glm(Cxperpre ~ (NDVI_500 + IABEF_2000)^2 +
+                              I(IA_500^2) + I(NDVI_500^2) + I(IABEF_2000^2),
+                            data = train, family = binomial(link = "probit"),init_r = .7, 
+                            seed = 333)
+waic_cp3_ndvibef <- waic(fit_cp3_ndvibef)
+
+#comparing the WAICs
+loo_compare(waic_cp3_ndvi, waic_cp3_iabef, waic_cp3_ndvibef,
+            waic_cp2)
+#The best model is the model with all the remaining covariates >> We do not remove 
+# a covariate and all its associations
+
+#round 4 (1 interaction round)
+#Next we check wether the interaction terms improve the WAIC. We always drop all the
+#interaction terms associated with one variable
+
+fit_cp4_ndvi <- stan_glm(Cxperpre ~ NDVI_500 + (IABEF_2000 + NDVIBEF_2000)^2 +
+                         I(NDVI_500^2) + I(IABEF_2000^2) +
+                         I(NDVIBEF_2000^2), data = train,
+                       family = binomial(link = "probit"),init_r = .7, seed = 333)
+
+waic_cp4_ndvi <- waic(fit_cp4_ndvi)
+
+fit_cp4_iabef <- stan_glm(Cxperpre ~ (NDVI_500 + NDVIBEF_2000)^2 +IABEF_2000 +
+                         I(NDVI_500^2) + I(IABEF_2000^2) +
+                         I(NDVIBEF_2000^2), data = train,
+                       family = binomial(link = "probit"),init_r = .7, seed = 333)
+
+waic_cp4_iabef <- waic(fit_cp4_iabef)
+
+fit_cp4_ndvibef <- stan_glm(Cxperpre ~ (NDVI_500 + IABEF_2000)^2 + NDVIBEF_2000 +
+                            I(NDVI_500^2) + I(IABEF_2000^2) +
+                            I(NDVIBEF_2000^2), data = train,
+                          family = binomial(link = "probit"),init_r = .7, seed = 333)
+
+waic_cp4_ndvibef <- waic(fit_cp4_ndvibef)
+
+#comparing the WAICs
+loo_compare(waic_cp4_ndvi, waic_cp4_iabef, waic_cp4_ndvibef,
+            waic_cp2)
+#The best model is the one with all the remaining interactions, hence we stick to the
+#model with all remaining interactions.
+
+#round 5 (first quadratic round)
+#Next, we check whether the individual quadratic effects improve the WAIC. Hence, we 
+#drop the quadratic terms one by one and decide as we did above
+
+fit_cp5_ndvi <- stan_glm(Cxperpre ~ (NDVI_500 + IABEF_2000 + NDVIBEF_2000)^2 +
+                         I(IABEF_2000^2) + I(NDVIBEF_2000^2), data = train,
+                       family = binomial(link = "probit"),init_r = .7, seed = 333)
+waic_cp5_ndvi <- waic(fit_cp5_ndvi)
+
+
+fit_cp5_iabef <- stan_glm(Cxperpre ~ (NDVI_500 + IABEF_2000 + NDVIBEF_2000)^2 +
+                         I(NDVI_500^2) + I(NDVIBEF_2000^2), data = train,
+                       family = binomial(link = "probit"),init_r = .7, seed = 333)
+waic_cp5_iabef <- waic(fit_cp5_iabef)
+
+
+fit_cp5_ndvibef <- stan_glm(Cxperpre ~ (NDVI_500 + IABEF_2000 + NDVIBEF_2000)^2 +
+                         I(NDVI_500^2) + I(IABEF_2000^2), data = train,
+                       family = binomial(link = "probit"),init_r = .7, seed = 333)
+waic_cp5_ndvibef <- waic(fit_cp5_ndvibef)
+
+#comparing the WAICs
+loo_compare(waic_cp5_ndvi, waic_cp5_iabef, waic_cp5_ndvibef,
+            waic_cp2)
+#The best model is the one without the quadratic term for NDVI_before, hence we drop
+#this term.
+
+#Round 6 (Dropping quadratic terms round 2)
+waic_cp5 <- waic_cp5_ndvibef
+
+fit_cp6_ndvi <- stan_glm(Cxperpre ~ (NDVI_500 + IABEF_2000 + NDVIBEF_2000)^2 +
+                            I(IABEF_2000^2), data = train,
+                            family = binomial(link = "probit"),init_r = .7, seed = 333)
+waic_cp6_ndvi <- waic(fit_cp6_ndvi)
+
+fit_cp6_iabef <- stan_glm(Cxperpre ~ (NDVI_500 + IABEF_2000 + NDVIBEF_2000)^2 +
+                              I(NDVI_500^2), data = train,
+                            family = binomial(link = "probit"),init_r = .7, seed = 333)
+waic_cp6_iabef <- waic(fit_cp6_iabef)
+
+#comparing the WAICs
+loo_compare(waic_cp6_ndvi, waic_cp6_iabef,
+            waic_cp5)
+#The best model is the one without the quadratic term for IA_before, hence we drop
+#this term.
+#Round 7 (Dropping quadratic terms round 3)
+waic_cp6 <- waic_cp6_iabef
+
+fit_cp7_ndvi <- stan_glm(Cxperpre ~ (NDVI_500 + IABEF_2000 + NDVIBEF_2000)^2,
+                        data = train, family = binomial(link = "probit"),init_r = .7,
+                        seed = 333)
+waic_cp7_ndvi <- waic(fit_cp7_ndvi)
+loo_compare(waic_cp7_ndvi, waic_cp6)
+#The best model, is the model with quadratic NDVI term. Hence, we keep it!
+
+#In conclusion, the best model (the most parsimonous with the best prediction
+#performance for cp is the model with the linear specification of NDVI_500, IABEF_2000,
+#NDVI_2000, the interaction terms between the three and the quadratic term of NDVI_500)
+
+fit_cp_b <- stan_glm(Cxperpre ~ (NDVI_500 + IABEF_2000 + NDVIBEF_2000)^2 +
+                           I(IABEF_2000^2), data = train,
+                         family = binomial(link = "probit"),init_r = .7, seed = 333)
