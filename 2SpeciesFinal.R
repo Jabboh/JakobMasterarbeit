@@ -392,8 +392,9 @@ testSpatialAutocorrelation(dharm_gj_un_spatial,
 #4. Finding the "best" model
 #I proceed as follows. I drop each environmental covariate(month, NDVI, IA...) 
 #and the related terms (quadratic + interactions) separately and choose the model with
-#the highest WAIC. If this WAIC is higher than the WAIC of the complex model, I 
-#repeat the steps until the more complex model has a higher WAIC.
+#the lowest WAIC (the best reduced model). If this WAIC is higher (meaning worse)
+#than the WAIC of the complex model, I repeat the steps until the more complex model has
+#a lower WAIC (meaning better model).
 
 #For CP
 waic_cp <- waic(fit_cp)
@@ -433,165 +434,129 @@ waic_cp1_mes <- waic(fit_cp1_mes)
 
 loo_compare(waic_cp1_ia, waic_cp1_ndvi, waic_cp1_iabef, waic_cp1_ndvibef,
             waic_cp1_mes, waic_cp)
-#The model with the highest elpd_diff is best model >> It's the model without the month
-#terms. Hence, we remove month dummy. 
+#The model with the highest elpd_diff is best model >> It's the model without the ndvi_500
+#variable terms. Hence, we remove the ndvi. 
 
 #Round 2
 #Next, we work with the model without the month dummies and repeat the procedure
-waic_cp1 <- waic(fit_cp1_mes)
+waic_cp1 <- waic(fit_cp1_ndvi)
 
 #Dropping IA_500
-fit_cp2_ia <- stan_glm(Cxperpre ~ (NDVI_500 + IABEF_2000 + NDVIBEF_2000)^2 +
-                         I(NDVI_500^2) + I(IABEF_2000^2) +
+fit_cp2_ia <- stan_glm(Cxperpre ~ (IABEF_2000 + NDVIBEF_2000)^2 +
+                         Mes + I(IABEF_2000^2) +
                          I(NDVIBEF_2000^2), data = train,
                        family = binomial(link = "probit"),init_r = .7, seed = 333)
 
 waic_cp2_ia <- waic(fit_cp2_ia)
 
-fit_cp2_ndvi <- stan_glm(Cxperpre ~ (IA_500 + IABEF_2000 + NDVIBEF_2000)^2 +
-                           I(IA_500^2) + I(IABEF_2000^2) +
-                           I(NDVIBEF_2000^2), data = train,
-                         family = binomial(link = "probit"),init_r = .7, seed = 333)
-waic_cp2_ndvi <- waic(fit_cp2_ndvi)
+fit_cp2_mes <- stan_glm(Cxperpre ~ (IA_500 + IABEF_2000 + NDVIBEF_2000)^2 +
+                          I(IA_500^2) + I(IABEF_2000^2) +
+                          I(NDVIBEF_2000^2), data = train,
+                        family = binomial(link = "probit"),init_r = .7, seed = 333)
+waic_cp2_mes <- waic(fit_cp2_mes)
 
-fit_cp2_iabef <- stan_glm(Cxperpre ~ (IA_500 + NDVI_500 + NDVIBEF_2000)^2 +
-                            I(IA_500^2) + I(NDVI_500^2) +
+fit_cp2_iabef <- stan_glm(Cxperpre ~ (IA_500 + NDVIBEF_2000)^2 +
+                            Mes + I(IA_500^2) +
                             I(NDVIBEF_2000^2), data = train,
                           family = binomial(link = "probit"),init_r = .7, seed = 333)
 waic_cp2_iabef <- waic(fit_cp2_iabef)
 
-fit_cp2_ndvibef <- stan_glm(Cxperpre ~ (IA_500 + NDVI_500 + IABEF_2000)^2 +
-                              I(IA_500^2) + I(NDVI_500^2) + I(IABEF_2000^2),
-                            data = train, family = binomial(link = "probit"),init_r = .7, 
-                            seed = 333)
+fit_cp2_ndvibef <- stan_glm(Cxperpre ~ (IA_500 + IABEF_2000)^2 +
+                              Mes + I(IA_500^2) + I(IABEF_2000^2), data = train,
+                            family = binomial(link = "probit"),init_r = .7, seed = 333)
 waic_cp2_ndvibef <- waic(fit_cp2_ndvibef)
 
 #comparing the WAICs
-loo_compare(waic_cp2_ia, waic_cp2_ndvi, waic_cp2_iabef, waic_cp2_ndvibef,
+loo_compare(waic_cp2_ia, waic_cp2_mes, waic_cp2_iabef, waic_cp2_ndvibef,
             waic_cp1)
-#The model with the highest elpd_diff is best model >> It's the model without the IA-terms
-#terms. Hence, we remove the variable IA_500 and all its associations. 
+#The model with the highest elpd_diff is best model >> It's the model without the IABEF-terms
+#terms. Hence, we remove the variable IABEF_2000 and all its associations. 
 
 #Round 3
-#Next, we work with the model without the month dummies and the IA_500 variable
+#Next, we work with the model without the ndvi_500 and the IABEF_2000 variable
 #and repeat the procedure
-waic_cp2 <- waic(fit_cp2_ia)
+waic_cp2 <- waic(fit_cp2_iabef)
 
 
-fit_cp3_ndvi <- stan_glm(Cxperpre ~ (IABEF_2000 + NDVIBEF_2000)^2 +
-                           I(IA_500^2) + I(IABEF_2000^2) +
+fit_cp3_mes <- stan_glm(Cxperpre ~ (IA_500 + NDVIBEF_2000)^2 +
+                           I(IA_500^2) +
                            I(NDVIBEF_2000^2), data = train,
                          family = binomial(link = "probit"),init_r = .7, seed = 333)
-waic_cp3_ndvi <- waic(fit_cp3_ndvi)
+waic_cp3_mes <- waic(fit_cp3_mes)
 
-fit_cp3_iabef <- stan_glm(Cxperpre ~ (NDVI_500 + NDVIBEF_2000)^2 +
-                            I(IA_500^2) + I(NDVI_500^2) +
+fit_cp3_ia <- stan_glm(Cxperpre ~ (NDVIBEF_2000)^2 +
+                            Mes +
                             I(NDVIBEF_2000^2), data = train,
                           family = binomial(link = "probit"),init_r = .7, seed = 333)
-waic_cp3_iabef <- waic(fit_cp3_iabef)
+waic_cp3_ia <- waic(fit_cp3_ia)
 
-fit_cp3_ndvibef <- stan_glm(Cxperpre ~ (NDVI_500 + IABEF_2000)^2 +
-                              I(IA_500^2) + I(NDVI_500^2) + I(IABEF_2000^2),
-                            data = train, family = binomial(link = "probit"),init_r = .7, 
-                            seed = 333)
+fit_cp3_ndvibef <- stan_glm(Cxperpre ~ (IA_500)^2 +
+                              Mes + I(IA_500^2), data = train,
+                            family = binomial(link = "probit"),init_r = .7, seed = 333)
 waic_cp3_ndvibef <- waic(fit_cp3_ndvibef)
 
 #comparing the WAICs
-loo_compare(waic_cp3_ndvi, waic_cp3_iabef, waic_cp3_ndvibef,
+loo_compare(waic_cp3_mes, waic_cp3_ia, waic_cp3_ndvibef,
             waic_cp2)
 #The best model is the model with all the remaining covariates >> We do not remove 
 # a covariate and all its associations
 
+
+######this needs to be corrected!
 #round 4 (1 interaction round)
 #Next we check wether the interaction terms improve the WAIC. We always drop all the
 #interaction terms associated with one variable
 
-fit_cp4_ndvi <- stan_glm(Cxperpre ~ NDVI_500 + (IABEF_2000 + NDVIBEF_2000)^2 +
-                         I(NDVI_500^2) + I(IABEF_2000^2) +
-                         I(NDVIBEF_2000^2), data = train,
+fit_cp4_ia <- stan_glm(Cxperpre ~ IA_500 + NDVIBEF_2000 +
+                         Mes + I(IA_500^2) +
+                         I(NDVIBEF_2000^2), data = train, refresh = 0,
                        family = binomial(link = "probit"),init_r = .7, seed = 333)
+waic_cp4_ia <- waic(fit_cp4_ia)
 
-waic_cp4_ndvi <- waic(fit_cp4_ndvi)
-
-fit_cp4_iabef <- stan_glm(Cxperpre ~ (NDVI_500 + NDVIBEF_2000)^2 +IABEF_2000 +
-                         I(NDVI_500^2) + I(IABEF_2000^2) +
-                         I(NDVIBEF_2000^2), data = train,
-                       family = binomial(link = "probit"),init_r = .7, seed = 333)
-
-waic_cp4_iabef <- waic(fit_cp4_iabef)
-
-fit_cp4_ndvibef <- stan_glm(Cxperpre ~ (NDVI_500 + IABEF_2000)^2 + NDVIBEF_2000 +
-                            I(NDVI_500^2) + I(IABEF_2000^2) +
-                            I(NDVIBEF_2000^2), data = train,
+fit_cp4_ndvibef <- stan_glm(Cxperpre ~ IA_500 + NDVIBEF_2000 +
+                            Mes + I(IA_500^2) +
+                            I(NDVIBEF_2000^2), data = train, refresh = 0,
                           family = binomial(link = "probit"),init_r = .7, seed = 333)
 
 waic_cp4_ndvibef <- waic(fit_cp4_ndvibef)
 
 #comparing the WAICs
-loo_compare(waic_cp4_ndvi, waic_cp4_iabef, waic_cp4_ndvibef,
+loo_compare(waic_cp4_ia, waic_cp4_ndvibef,
             waic_cp2)
-#The best model is the one with all the remaining interactions, hence we stick to the
-#model with all remaining interactions.
+#The best model is the one with no  interactions, hence we stick to the
+#model without the interactions.
 
 #round 5 (first quadratic round)
 #Next, we check whether the individual quadratic effects improve the WAIC. Hence, we 
 #drop the quadratic terms one by one and decide as we did above
 
-fit_cp5_ndvi <- stan_glm(Cxperpre ~ (NDVI_500 + IABEF_2000 + NDVIBEF_2000)^2 +
-                         I(IABEF_2000^2) + I(NDVIBEF_2000^2), data = train,
-                       family = binomial(link = "probit"),init_r = .7, seed = 333)
-waic_cp5_ndvi <- waic(fit_cp5_ndvi)
+#our new baseline model
 
 
-fit_cp5_iabef <- stan_glm(Cxperpre ~ (NDVI_500 + IABEF_2000 + NDVIBEF_2000)^2 +
-                         I(NDVI_500^2) + I(NDVIBEF_2000^2), data = train,
-                       family = binomial(link = "probit"),init_r = .7, seed = 333)
-waic_cp5_iabef <- waic(fit_cp5_iabef)
+
+fit_cp5_ia <- stan_glm(Cxperpre ~ IA_500 + NDVIBEF_2000 +
+                           Mes +
+                           I(NDVIBEF_2000^2), data = train, refresh = 0,
+                         family = binomial(link = "probit"),init_r = .7, seed = 333)
+waic_cp5_ia <- waic(fit_cp5_ia)
 
 
-fit_cp5_ndvibef <- stan_glm(Cxperpre ~ (NDVI_500 + IABEF_2000 + NDVIBEF_2000)^2 +
-                         I(NDVI_500^2) + I(IABEF_2000^2), data = train,
-                       family = binomial(link = "probit"),init_r = .7, seed = 333)
+fit_cp5_ndvibef <- stan_glm(Cxperpre ~ IA_500 + NDVIBEF_2000 +
+                              Mes + I(IA_500^2), data = train, refresh = 0,
+                            family = binomial(link = "probit"),init_r = .7, seed = 333)
 waic_cp5_ndvibef <- waic(fit_cp5_ndvibef)
 
-#comparing the WAICs
-loo_compare(waic_cp5_ndvi, waic_cp5_iabef, waic_cp5_ndvibef,
-            waic_cp2)
-#The best model is the one without the quadratic term for NDVI_before, hence we drop
-#this term.
-
-#Round 6 (Dropping quadratic terms round 2)
-waic_cp5 <- waic_cp5_ndvibef
-
-fit_cp6_ndvi <- stan_glm(Cxperpre ~ (NDVI_500 + IABEF_2000 + NDVIBEF_2000)^2 +
-                            I(IABEF_2000^2), data = train,
-                            family = binomial(link = "probit"),init_r = .7, seed = 333)
-waic_cp6_ndvi <- waic(fit_cp6_ndvi)
-
-fit_cp6_iabef <- stan_glm(Cxperpre ~ (NDVI_500 + IABEF_2000 + NDVIBEF_2000)^2 +
-                              I(NDVI_500^2), data = train,
-                            family = binomial(link = "probit"),init_r = .7, seed = 333)
-waic_cp6_iabef <- waic(fit_cp6_iabef)
 
 #comparing the WAICs
-loo_compare(waic_cp6_ndvi, waic_cp6_iabef,
-            waic_cp5)
-#The best model is the one without the quadratic term for IA_before, hence we drop
-#this term.
-#Round 7 (Dropping quadratic terms round 3)
-waic_cp6 <- waic_cp6_iabef
+loo_compare(waic_cp5_ia, waic_cp5_ndvibef,waic_cp4_ia)
+#The best model is the one with all the quadratic terms. Hence, we stick to the 
+#model with all quadratic terms
 
-fit_cp7_ndvi <- stan_glm(Cxperpre ~ (NDVI_500 + IABEF_2000 + NDVIBEF_2000)^2,
-                        data = train, family = binomial(link = "probit"),init_r = .7,
-                        seed = 333)
-waic_cp7_ndvi <- waic(fit_cp7_ndvi)
-loo_compare(waic_cp7_ndvi, waic_cp6)
-#The best model, is the model with quadratic NDVI term. Hence, we keep it!
 
 #In conclusion, the best model (the most parsimonous with the best prediction
-#performance for cp is the model with the linear specification of NDVI_500, IABEF_2000,
-#NDVI_2000, the interaction terms between the three and the quadratic term of NDVI_500)
+#performance for cp is the model with the linear specification of IA_500, NDVIBEF_2000,
+# and mes as well as the quadratic terms of IA_500 and NDVIBEF_2000
 
-fit_cp_b <- stan_glm(Cxperpre ~ (NDVI_500 + IABEF_2000 + NDVIBEF_2000)^2 +
-                           I(IABEF_2000^2), data = train,
+fit_cp_b <- stan_glm(Cxperpre ~ IA_500 + NDVIBEF_2000 + Mes + I(IA_500^2) +
+                           I(NDVIBEF_2000^2), data = train,
                          family = binomial(link = "probit"),init_r = .7, seed = 333)

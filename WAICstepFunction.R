@@ -120,7 +120,7 @@ fit_at <- stan_glm(Anatropre ~ (IA_500 + NDVI_500 + IABEF_2000 + NDVIBEF_2000)^2
 #quadratic)
 x <- fit_cp
 #x: fitted model for which coefficients should be dropped
-#y: names of the covariates ()
+#z: names of the covariates 
 z <- c(names(fit_cp$coefficients)[2:5], "Mes")
 step_waic_entCov <- function(x, y){
   #define the base model to which the reduced models will be compared
@@ -129,50 +129,50 @@ step_waic_entCov <- function(x, y){
   #After the first run, it is equal to the "best" model
   w_com <- matrix("start")
   rownames(w_com) <- "start"
-#Create a while loop, that keeps dropping variables until, the complexer model
+#Create a while loop, that keeps dropping variables until, the more complex model
   #performs better than the reduced models
-  while(rownames(w_com)[length(rownames(w_com))] != "base"){
-    #Create an empty list to store the objects of the different models
+  while(rownames(w_com)[1] != "base"){
+    #Create an empty list to store the model-objects of the different models
     st <- vector("list", length(y) + 1)
     #an empty list for all the WAICs
     waics <- st
+    #add the baseline WAIC to which the more parsimonious models will 
+    #be compared (It's always the "Most" complex model at the specific point of the 
+    #model-selection procedure)
+    waics[[length(waics)]] <- waic(base)
     #Run the models (removing one covariate and all its associations in each run)
     for (i in y){
       #index
       j <-match(i,y)
       #We run the model without the terms associated with y (linear, quadratic
       #and interaction terms and store the fitted model in st)
-      st[[j]] <- update(base, formula=drop.terms(base$terms, grep(i, attr(x$terms, "term.labels") ), keep.response=TRUE))
-      print(st[[j]]$terms)
+      st[[j]] <- update(base, formula=drop.terms(base$terms, grep(i, attr(base$terms, "term.labels")), keep.response=TRUE))
+      print(attr(st[[j]]$terms, "term.labels"))
       #Calculating the WAIC of the model and storing it in waics
       waics[[j]] <- waic(st[[j]])
     }
-
-    #add the baseline WAIC to which the more parsimonious models will 
-    #be compared (It's always the "Most" complex model at the specific point of the 
-    #model-selection procedure)
-    waics[[length(waics)]] <- waic(base)
-    
     #a vector with all the model names (the ones without one covariate + the base)
     n <- c(y, "base")
     #naming the two storage lists accordingly
     names(st) <- n
     names(waics) <- n
-    #Compare the different WAICs
+    #Compare the different WAICs, The first row contains the preferred model
+    #(the one with the lowest WAIC)
     w_com <- loo_compare(waics)
     print(w_com)
     #Printing a message to the screen indicating that variable xxx will be thrown out
-    print(paste0 ("The variable ", rownames(w_com)[length(n)], " and its associations will be kicked out of the model"))
+    print(paste0 ("The variable ", rownames(w_com)[1], " and its associations will be kicked out of the model"))
     #deleting the variable that we throw out according to WAIC in the variable
     #names vector y
-    y <- y[y != rownames(w_com)[length(n)]]
+    y <- y[y != rownames(w_com)[1]]
     #storing the model without the removed variable as the new base model
-    base <- st[[which(names(st) == rownames(w_com)[length(n)])]]
+    base <- st[[which(names(st) == rownames(w_com)[1])]]
   }
   #Return the final model
-  return (base)#for some reason this does not work
+  return(base)#for some reason this does not work
 }
 
+  
 ####just for testing reasons (delete later)
 hey <- step_waic_entCov(x,z)
 st <- vector("list", length(y))
@@ -180,3 +180,160 @@ names(st) <- y
 f <- list(waic(fit_cp1_ia), waic(fit_cp1_ndvi), waic(fit_cp1_mes))
 apply(st, FUN = waic) 
 waic(st[[2]])
+i <- "NDVI_500"
+grep(paste0(i, ".*:|:.*", i), attr(base$terms, "term.labels"))
+
+x<- stan_glm(Cxperpre ~ (IA_500 + NDVIBEF_2000)^2 +
+                         Mes + I(IA_500^2) +
+                         I(NDVIBEF_2000^2), data = train, refresh = 0,
+                       family = binomial(link = "probit"),init_r = .7, seed = 333)
+y <- c("IA_500", "NDVIBEF_2000", "Mes")
+  attr(x$terms, "term.labels")
+interactions <- function(x, y){
+  #define the base model to which the reduced models will be compared
+  base <- x
+  #defining the y vector with "mes", bc "mes" does not have interactions
+  y <- y[y != "Mes"]
+  #Create variable w_com that serves as the condition for the while-loop
+  #After the first run, it is equal to the "best" model
+  
+  #resetting w_com variable
+  w_com <- matrix("start")
+  rownames(w_com) <- "start"
+  #initializing a while-loop that keeps dropping interactions as long as the 
+  #one less complex model is better
+  while((rownames(w_com)[1] != "base") & (grepl(":", attr(base$terms, "term.labels")) %>% any)){
+    #Create an empty list to store the model-objects of the different models
+    st <- vector("list", length(y) + 1)
+    #an empty list for all the WAICs
+    waics <- st
+    #add the baseline WAIC to which the more parsimonious models will 
+    #be compared (It's always the "Most" complex model at the specific point of the 
+    #model-selection procedure)
+    waics[[length(waics)]] <- waic(base)
+    #Calculate the different reduced models
+    for (i in y){
+      #index
+      j <-match(i,y)
+      #We run the model without the terms associated with y (linear, quadratic
+      #and interaction terms and store the fitted model in st)
+      st[[j]] <- update(base, formula=drop.terms(base$terms, grep(paste0(i, ".*:|:.*", i), attr(base$terms, "term.labels")),
+                                                 keep.response=TRUE))
+      print(attr(st[[j]]$terms, "term.labels"))
+      #Calculating the WAIC of the model and storing it in waics
+      waics[[j]] <- waic(st[[j]])
+    }
+    #a vector with all the model names (the ones without one covariate + the base)
+    n <- c(y, "base")
+    #naming the two storage lists accordingly
+    names(st) <- n
+    names(waics) <- n
+    #Compare the different WAICs, The first row contains the preferred model
+    #(the one with the lowest WAIC)
+    w_com <- loo_compare(waics)
+    print(w_com)
+    #Printing a message to the screen indicating that variable xxx will be thrown out
+    print(paste0 ("The interaction terms of variable ", rownames(w_com)[1], " will be dropped"))
+
+    #storing the model without the removed variable as the new base model
+    base <- st[[which(names(st) == rownames(w_com)[1])]]
+  }
+  #Return the final model
+  #resetting w_com variable
+  w_com <- matrix("start")
+  rownames(w_com) <- "start"
+  #initializing a while-loop that keeps dropping interactions as long as the 
+  #one less complex model is better
+  while(rownames(w_com)[1] != "base"){
+    #Create an empty list to store the model-objects of the different models
+    st <- vector("list", length(y) + 1)
+    #an empty list for all the WAICs
+    waics <- st
+    #add the baseline WAIC to which the more parsimonious models will 
+    #be compared (It's always the "Most" complex model at the specific point of the 
+    #model-selection procedure)
+    waics[[length(waics)]] <- waic(base)
+    #Calculate the different reduced models
+    for (i in y){
+      #index
+      j <-match(i,y)
+      #We run the model without the terms associated with y (linear, quadratic
+      #and interaction terms and store the fitted model in st)
+      st[[j]] <- update(base, formula=drop.terms(base$terms, grep(paste0("I(", i), attr(base$terms, "term.labels"), fixed = T),
+                                                 keep.response=TRUE))
+      print(attr(st[[j]]$terms, "term.labels"))
+      #Calculating the WAIC of the model and storing it in waics
+      waics[[j]] <- waic(st[[j]])
+    }
+    #a vector with all the model names (the ones without one covariate + the base)
+    n <- c(y, "base")
+    #naming the two storage lists accordingly
+    names(st) <- n
+    names(waics) <- n
+    #Compare the different WAICs, The first row contains the preferred model
+    #(the one with the lowest WAIC)
+    w_com <- loo_compare(waics)
+    print(w_com)
+    #Printing a message to the screen indicating that variable xxx will be thrown out
+    print(paste0 ("The quadratic term of variable ", rownames(w_com)[1], " will be dropped"))
+    
+    #storing the model without the removed variable as the new base model
+    base <- st[[which(names(st) == rownames(w_com)[1])]]
+  }
+  #Return the final model
+  return(base)#for some reason this does not work
+}
+
+arg <- interactions(x,y)
+
+#Now, I check whether the quadratic terms, "improve the model"
+quadratic <- function(x, y){
+  #resetting w_com variable
+  w_com <- matrix("start")
+  rownames(w_com) <- "start"
+  #initializing a while-loop that keeps dropping interactions as long as the 
+  #one less complex model is better
+  while(rownames(w_com)[1] != "base"){
+    #Create an empty list to store the model-objects of the different models
+    st <- vector("list", length(y) + 1)
+    #an empty list for all the WAICs
+    waics <- st
+    #add the baseline WAIC to which the more parsimonious models will 
+    #be compared (It's always the "Most" complex model at the specific point of the 
+    #model-selection procedure)
+    waics[[length(waics)]] <- waic(base)
+    #Calculate the different reduced models
+    for (i in y){
+      #index
+      j <-match(i,y)
+      #We run the model without the terms associated with y (linear, quadratic
+      #and interaction terms and store the fitted model in st)
+      st[[j]] <- update(base, formula=drop.terms(base$terms, grep(paste0("I(", i), attr(base$terms, "term.labels"), fixed = T),
+                                                 keep.response=TRUE))
+      print(attr(st[[j]]$terms, "term.labels"))
+      #Calculating the WAIC of the model and storing it in waics
+      waics[[j]] <- waic(st[[j]])
+    }
+    #a vector with all the model names (the ones without one covariate + the base)
+    n <- c(y, "base")
+    #naming the two storage lists accordingly
+    names(st) <- n
+    names(waics) <- n
+    #Compare the different WAICs, The first row contains the preferred model
+    #(the one with the lowest WAIC)
+    w_com <- loo_compare(waics)
+    print(w_com)
+    #Printing a message to the screen indicating that variable xxx will be thrown out
+    print(paste0 ("The quadratic term of variable ", rownames(w_com)[1], " will be dropped"))
+    
+    #storing the model without the removed variable as the new base model
+    base <- st[[which(names(st) == rownames(w_com)[1])]]
+  }
+  #Return the final model
+  return(base)#for some reason this does not work
+}
+
+quadratic(arg, y)
+
+grep(paste0("I(", i), attr(base$terms, "term.labels"), fixed = T)
+i <- "NDVI_500"
