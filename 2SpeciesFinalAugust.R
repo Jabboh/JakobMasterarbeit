@@ -19,7 +19,9 @@
 #gjam vs. predictions of univariate model
 #b. Comparing the uncertainty of the different "prediction"-types
 rm(list=ls())
-setwd("C:\\Users\\Jakob\\Documents\\Uni\\GCE\\Thesis\\JakobMasterarbeit\\Data")
+setwd("C:\\Users\\jakob\\Documents\\JakobMasterarbeit\\Data")
+#install.packages("clusteval")
+
 #loading packages
 library(readxl) #to read in the data
 library(rstanarm) #Doing Bayesian probit GLMs for single species
