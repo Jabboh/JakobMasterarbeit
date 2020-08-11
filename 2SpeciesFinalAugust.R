@@ -20,7 +20,7 @@
 #b. Comparing the uncertainty of the different "prediction"-types
 rm(list=ls())
 setwd("C:\\Users\\jakob\\Documents\\JakobMasterarbeit\\Data")
-#install.packages("clusteval")
+#install.packages("gridExtra")
 
 #loading packages
 library(readxl) #to read in the data
@@ -33,6 +33,7 @@ library(dplyr) # for simplified syntax and neater code
 library(corrplot)
 library(loo) #to calculate WAIC
 library(bayesplot) #Some handy features for plotting in the Bayesian realm
+library(gridExtra) # for plotting multiple graphs in one window
 #### 1.Data Preperation
 #read in the data (Monthly species PA data for seven different mosquito species
 #and according environmental covariates)
@@ -511,7 +512,9 @@ joint_fin <- gjam(~  Mayo + Junio + Julio + Agosto + Septiembre + IA_500 +
                 NDVIBEF_2000 + I(IA_500^2) + I(NDVIBEF_2000^2),
                 ydata = y_train, xdata = train_gj, modelList = ml)
 joint_fin$fit$DIC
-#The DIC (related to WAIC) is also lower for new gjam model. 
+#The DIC (related to WAIC) is also lower for new gjam model.
+
+#Saving the three final models
 ####5. Doing DHARMa on the final models
 #For cp
 dharm_fin_cp <- createDHARMa(simulatedResponse = t(posterior_predict(fit_fin_cp)), observedResponse = fit_fin_cp$y,
