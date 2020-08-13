@@ -223,7 +223,7 @@ joint_fin$parameters$corMu #It's the pearson correlation coefficient (for two
 #(are you sure? What's the natural level? I guess 0)
 
 ###c. Response Curves
-##For Culex Perexuus
+##For Culex perexiguus
 
 ###Response Curve für IA_500 :predict the probability of presence for the different ia-values,
 #holding the other covariates at their mean (0) or at a constant factor level (mes)
@@ -264,7 +264,7 @@ ggd <- cbind(xdata, univariate)
 #maiking the plot
 response_cp_uv <- ggplot(data = ggd, aes(x = IA_500, y = univariate, color = Mes)) +
   geom_point() + ylab("Predicted Probability") + xlab("IA_500 in Standard Units") +
-  ggtitle ("Response Curve of Inundation Area for Culex Perexuus in Univariate Model") +
+  ggtitle ("Response Curve of Inundation Area for Culex perexiguus in Univariate Model") +
   guides(color=guide_legend(title="Month"))
 
 ##Doing the same thing for gjam
@@ -302,7 +302,7 @@ dr_gj$Mes <- ggd$Mes
 ggd_gj_un <- cbind(dr_gj, pred_gj_un)
 response_cp_un <- ggplot(data = ggd_gj_un, aes(x = IA500, y = pred_gj_un, color = Mes)) +
   geom_point() + ylab("Predicted Probability") + xlab("IA_500 in Standard Units") +
-  ggtitle ("Response Curve of Inundation Area for Culex Perexuus in GJAM") +
+  ggtitle ("Response Curve of Inundation Area for Culex perexiguus in GJAM") +
   guides(color=guide_legend(title="Month"))
 
 ##Plot gjam and rstanarm response curves in the same plot
@@ -317,7 +317,7 @@ response_cp_uv_un <- ggplot(data = ggd, aes(x = IA_500, color = Mes)) +
   geom_point(aes(y = univariate, shape = "univariate")) + 
   geom_point(aes(y = multivariate, shape = "multivariate")) + ylab("Predicted Probability") + 
   xlab("IA_500 in Standard Units") +
-  ggtitle ("Univariate vs. Unconditional Multivariate Response Curves \n of Inundation Area for Culex Perexuus") +
+  ggtitle ("Univariate vs. Unconditional Multivariate Response Curves \n of Inundation Area for Culex perexiguus") +
   guides(color=guide_legend(title="Month"), shape = guide_legend(title="Model"))
 
 #Why are the response curves different? Does that contradict our hypothesis that unconditional
@@ -364,7 +364,7 @@ dr_gj_con$Mes <- ggd$Mes
 dr_gj_con <- cbind(dr_gj_con, pred_gj_con)
 response_cp_gj_con <- ggplot(data = dr_gj_con, aes(x = IA500, y = pred_gj_con, color = Mes, shape = cond)) +
   geom_point() + ylab("Predicted Probability") + xlab("IA_500 in Standard Units") +
-  ggtitle ("Response Curve of Inundation Area for Culex Perexuus in GJAM \n Conditional on Presence of Anophles Atroparvus") +
+  ggtitle ("Response Curve of Inundation Area for Culex perexiguus in GJAM \n Conditional on Presence of Anophles Atroparvus") +
   guides(color=guide_legend(title="Month"), shape = guide_legend(title = "Anopheles atroparvus"))
 
 #strange results, ordering of the effect of month on pred, changes depending on whether AT is present
@@ -394,7 +394,7 @@ for( i in levels(xdata$Mes)){
   #Doing the ggplot
   plot <- ggplot(data = d, aes(x = IA_500, y = pred, shape = mode)) +
     geom_point() + ylab("Predicted Probability") + xlab("IA_500 in Standard Units") +
-    ggtitle (paste0("Response Curve of Inundation Area for Culex Perexuus in GJAM \n Conditional on Presence of Anophles Atroparvus vs. Univariate Model for Month ", i)) +
+    ggtitle (paste0("Response Curve of Inundation Area for Culex perexiguus in GJAM \n Conditional on Presence of Anophles Atroparvus vs. Univariate Model for Month ", i)) +
     theme(legend.title = element_blank())
   plots_uv_con[[j]] <- plot
 }
@@ -439,7 +439,7 @@ ggd <- cbind(xdata, univariate)
 #maiking the plot
 response_cp_uv <- ggplot(data = ggd, aes(x = NDVIBEF_2000, y = univariate, color = Mes)) +
   geom_point() + ylab("Predicted Probability") + xlab("NDVIBEF_2000 in Standard Units") +
-  ggtitle ("Response Curve of NDVI Before for Culex Perexuus in Univariate Model") +
+  ggtitle ("Response Curve of NDVI Before for Culex perexiguus in Univariate Model") +
   guides(color=guide_legend(title="Month"))
 
 #Interesting overall shape >> kinda contradicts the niche concept >> we have maxima at the edges
@@ -477,7 +477,7 @@ dr_gj$Mes <- ggd$Mes
 ggd_gj_un <- cbind(dr_gj, pred_gj_un)
 response_cp_un <- ggplot(data = ggd_gj_un, aes(x = NDVIBEF2000, y = pred_gj_un, color = Mes)) +
   geom_point() + ylab("Predicted Probability") + xlab("NDVIBEF_2000 in Standard Units") +
-  ggtitle ("Response Curve of NDVI Before for Culex Perexuus in GJAM") +
+  ggtitle ("Response Curve of NDVI Before for Culex perexiguus in GJAM") +
   guides(color=guide_legend(title="Month"))
 
 ##Plot gjam and rstanarm response curves in the same plot
@@ -492,7 +492,7 @@ response_cp_uv_un <- ggplot(data = ggd, aes(x = NDVIBEF_2000, color = Mes)) +
   geom_point(aes(y = univariate, shape = "univariate")) + 
   geom_point(aes(y = multivariate, shape = "multivariate")) + ylab("Predicted Probability") + 
   xlab("NDVIBEF_2000 in Standard Units") +
-  ggtitle ("Univariate vs. Multivariate Response Curves of NDVI Before for Culex Perexuus") +
+  ggtitle ("Univariate vs. Multivariate Response Curves of NDVI Before for Culex perexiguus") +
   guides(color=guide_legend(title="Month"), shape = guide_legend(title="Model"))
 
 #They have a whole different shape >> I dont't think they should behave differently, but apparently
@@ -539,7 +539,7 @@ dr_gj_con$Mes <- ggd$Mes
 dr_gj_con <- cbind(dr_gj_con, pred_gj_con)
 response_cp_gj_con <- ggplot(data = dr_gj_con, aes(x = NDVIBEF2000, y = pred_gj_con, color = Mes, shape = cond)) +
   geom_point() + ylab("Predicted Probability") + xlab("NDVIBEF_2000 in Standard Units") +
-  ggtitle ("Response Curve of NDVI Before for Culex Perexuus in GJAM \n Conditional on Presence of Anophles Atroparvus") +
+  ggtitle ("Response Curve of NDVI Before for Culex perexiguus in GJAM \n Conditional on Presence of Anophles Atroparvus") +
   guides(color=guide_legend(title="Month"), shape = guide_legend(title = "Anopheles atroparvus"))
 
 #strange results, ordering of the effect of month on pred, changes depending on whether AT is present
@@ -567,7 +567,7 @@ for( i in levels(xdata$Mes)){
   #Doing the ggplot
   plot <- ggplot(data = d, aes(x = NDVIBEF_2000, y = pred, shape = mode)) +
     geom_point() + ylab("Predicted Probability") + xlab("NDVIBEF_2000 in Standard Units") +
-    ggtitle (paste0("Response Curve of NDVI Before for Culex Perexuus in GJAM \n Conditional on Presence of Anophles Atroparvus vs. Univariate Model for Month ", i)) +
+    ggtitle (paste0("Response Curve of NDVI Before for Culex perexiguus in GJAM \n Conditional on Presence of Anophles Atroparvus vs. Univariate Model for Month ", i)) +
     theme(legend.title = element_blank())
   plot
   plots_uv_con[[j]] <- plot
