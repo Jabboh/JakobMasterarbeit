@@ -11,7 +11,7 @@
 #gjam vs. predictions of univariate model
 #b. Comparing the uncertainty of the different "prediction"-types
 rm(list=ls())
-setwd("C:\\Users\\jakob\\Documents\\JakobMasterarbeit\\Data")
+setwd("C:\\Users\\Jakob\\Documents\\Uni\\GCE\\Thesis\\JakobMasterarbeit\\Data")
 #install.packages("gridExtra")
 
 #loading packages
@@ -25,8 +25,9 @@ library(dplyr) # for simplified syntax and neater code
 library(corrplot)
 library(loo) #to calculate WAIC
 library(bayesplot) #Some handy features for plotting in the Bayesian realm
-library(gridExtra) # for plotting multiple graphs in one window
 library(DALEX) #Explanatory Model Analysis / Variable Importance
+library(tibble)
+
 #### 1.Data Preperation
 #read in the data (Monthly species PA data for seven different mosquito species
 #and according environmental covariates)
@@ -66,7 +67,7 @@ spec[,"An_atroparvus"] <- NULL
 #Taking a look at occurence rate across all observations (the Mean)
 summary(spec)
 #Hence, we select Cxperpre and Anatropre for our first analysis:
-y <- spec[,c("Cxperpre", "Anatropre")]
+y <- as_tibble(spec[,c("Cxperpre", "Anatropre")])
 
 #Normalizing Covariates: Otherwise, interaction terms hardy interpretable and skewed
 df[,17:36] <- scale(df[,17:36])
@@ -115,37 +116,159 @@ joint_fin <- gjam(~  Mayo + Junio + Julio + Agosto + Septiembre + IA_500 +
                   ydata = y_train, xdata = train_gj, modelList = ml)
 
 ##############################Dalex for univariate model
-#xdata
+#Define our covariates as xdata
 xdata <- train[,c("Mes", "IA_500", "NDVIBEF_2000")]
-# create custom predict function
-pred <- function(model, newdata)  {
-  return(posterior_predict(model, newdata) %>% apply(2, median))
+# create custom predict function for rstanarm "posterior_predict function
+pred_uv <- function(model, newdata)  {
+  return(posterior_predict(model, newdata) %>% apply(2, mean))
 }
+#makes a big difference, whether you take mean or median!, I take the mean
+#bc we do it the same way in gjam
+#create the explain object (core object of DALEX) which contains the data and
+#the predict function
+dal_cp <- explain(fit_fin_cp, xdata, y = train$Cxperpre, predict_function = pred_uv,
+                  type = "classification", label = "univariate probit")
+        
 
-dal_cp <- explain(fit_fin_cp, xdata, y = train$Cxperpre, predict_function = pred,
-                  type = "classification")
-
-#permutation-based variable importance measure
+# calculate the permutation-based variable importance measure (the difference
+#(1-AUC) between original data and permuted data per covariate)
 set.seed(1980)
-vi_cp <- model_parts(dal_cp)
-plot(vi_cp) #why label = lm??? I specified classification above?
-#I, also dont understand "1 - AUC loss" o_o 
+vi_cp <- model_parts(dal_cp, type = "difference", B = 50)
+plot(vi_cp) + 
+  labs(title = "Variable Importance over 50 Permuations", subtitle = "created for the univariate probit model of Culex perexiguus") 
+#So, Mes is the  most important variable, followed by IA_500 and at last 
+#NDVIBEF_2000. When permuting the Mes variable entries and then predicting
+#our response, the resulting AUC is roughly .12 worse than for the 
+#predictions without the permutations. 
+
 
 #####For gjam unconditional predictions
 
 ########You need to add your quadratic terms and shit >> maybe it makes sense to do this in your
 #script after you selected your final model, remember you already did this with your response 
 #curves!
-xdata_gj <- train_gj[,c("IA_500", "NDVIBEF_2000", "Abril", "Mayo", "Junio", "Julio", "Agosto",
-                        "Septiembre")]
-xdata_gj$intercept <- rep(1 , nrow(xdata_gj))
 
-# create custom predict function
-pred <- function(model, newdata)  {
-  #prepare data for predictions
-  newdata <- list(xdata = newdata, nsim = 4000)
-  #the predictions
-  pred <- gjamPredict(output = model, newdata = newdata)
+
+# create custom predict function, this is a little trickier, because we need
+#to feed it xdata with the three columns (Mes, IA_500 and NDVIBEF) (bc we 
+#want to get the variable importance of these three variables), but for
+#gjamPredict we need to modify the data so that the function works.
+pred_gj <- function(model, newdata)  {
+  #prepare data for prediction
+  #convert the factor mes to dummies
+  newdata <- gjamDummy(newdata$Mes, newdata)
+  #add quadratic terms
+  newdata$"I(IA500^2)" <- (newdata$IA_500)^2
+  newdata$"I(NDVIBEF2000^2)" <- (newdata$NDVIBEF_2000)^2
   
-  return()
+  #make a newdata list for gjam
+  newdata <- list(xdata = newdata, nsim = 2000)
+  #Doing the predictions
+  pre <- gjamPredict(output = model, newdata = newdata)
+  #return the mean of the y-chains for every observation
+  return(pre$sdList$yMu[,1])
 }
+
+#make the explainer
+dal_cpgj <- explain(joint_fin, xdata, y = train$Cxperpre,
+                  predict_function = pred_gj, type = "classification")
+
+#permutation-based variable importance measure
+set.seed(1980)
+vi_cpgj <- model_parts(dal_cpgj, type = "difference", B = 50) # du musst auf jeden Fall number of samples
+#reduzieren >> dauert nämlich forever
+
+#plot the results
+plot(vi_cpgj) + labs(title = "Variable Importance over 50 Permutations", subtitle = "created for the multivariate probit model of Culex perexiguus")
+#Most important variable is IA_500, then Mes and then NDVIBEF_2000
+
+####################Doing it for conditional predictions
+
+
+# create custom predict function, adding the presence-absence of Anopheles
+#as ydataCond to newdata list
+pred_gjco <- function(model, newdata)  {
+  #prepare data for prediction
+  #convert the factor mes to dummies
+  newdata <- gjamDummy(newdata$Mes, newdata)
+  #add quadratic terms
+  newdata$"I(IA500^2)" <- (newdata$IA_500)^2
+  newdata$"I(NDVIBEF2000^2)" <- (newdata$NDVIBEF_2000)^2
+  #make a newdata list for gjam
+  newdata <- list(xdata = newdata, ydataCond = y_train[,2], nsim = 2000)
+  #Doing the predictions
+  pre <- gjamPredict(output = model, newdata = newdata)
+  #return the mean of the y-chains for every observation
+  return(pre$sdList$yMu[,1])
+}
+
+#make the explainer
+dal_cpgjco <- explain(joint_fin, xdata, y = train$Cxperpre,
+                    predict_function = pred_gjco, type = "classification")
+
+#permutation-based variable importance measure
+set.seed(1980)
+#DOing it for 50 permutations
+vi_cpgjco <- model_parts(dal_cpgjco, type = "difference", B = 50) # du musst auf jeden Fall number of samples
+
+#plots the results
+plot(vi_cpgjco) + labs(title = "Variable Importance", subtitle = "created for the multivariate probit model of Culex perexiguus")
+#differences are much smaller, because the "conditioning" can make up for most
+#of the predictive power loss due to "permuting" the specific covariate
+
+#plot all three: Try this at the Uni Computer!
+#library(gridExtra)
+
+#Treat the conditioning as a covariate (inlcude it as one variable in your
+#variable importance analysis)
+xdata_con <- as_tibble(cbind(xdata, y_train[,2]))
+
+pred_con <- function(model, newdata)  {
+  #prepare data for prediction
+  #convert the factor mes to dummies
+  newdata <- gjamDummy(newdata$Mes, newdata) %>% as_tibble()
+  #add quadratic terms
+  newdata$"I(IA500^2)" <- (newdata$IA_500)^2
+  newdata$"I(NDVIBEF2000^2)" <- (newdata$NDVIBEF_2000)^2
+  #make a newdata list for gjam
+  newdata <- list(xdata = newdata, ydataCond = newdata[,match("Anatropre", names(newdata))], nsim = 2000)
+  #Doing the predictions
+  pre <- gjamPredict(output = model, newdata = newdata)
+  #return the mean of the y-chains for every observation
+  return(pre$sdList$yMu[,1])
+}
+
+#make the explainer
+dal_cp_con <- explain(joint_fin, xdata_con, y = train$Cxperpre,
+                      predict_function = pred_con, type = "classification")
+
+#permutation-based variable importance measure
+set.seed(1980)
+#DOing it for 10 permutations
+vi_cp_con <- model_parts(dal_cp_con, type = "difference", B = 10)
+
+#plotting the results
+plot(vi_cp_con) + labs(title = "Variable Importance", subtitle = "created for the multivariate probit model of Culex perexiguus conditional on Anopheles troparvus")
+#Anatrope label muss noch geändert werden
+
+#Check mal AUC von beiden complete Models!
+#mach vielleicht auch beides in einen plot, dann sieht man direkt, wie die
+#Modelle zu einander stehen
+auc_cpgj <- loss_one_minus_auc(observed = train$Cxperpre,
+                               predicted = pred_gj(joint_fin, xdata))
+auc_cpuv <- loss_one_minus_auc(observed = train$Cxperpre,
+                               predicted = pred_uv(fit_fin_cp, xdata))
+#>> are very similiar :), like we hypothesized
+
+#######Quatsch
+
+dal_cp <- explain(fit_fin_cp, xdata, y = train$Cxperpre, predict_function = pred_uv,
+                  type = "classification", label = "univariate probit")
+
+
+# calculate the permutation-based variable importance measure (the difference
+#(1-AUC) between original data and permuted data per covariate)
+set.seed(1980)
+viii <- model_parts(dal_cp, B = 10)
+vaaa  <- model_parts(dal_cp, B = 10)
+plot(viii, vaaa, bar_width = 2) 

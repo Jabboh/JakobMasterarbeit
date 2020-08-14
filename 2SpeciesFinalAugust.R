@@ -73,7 +73,7 @@ spec[,"An_atroparvus"] <- NULL
 #Taking a look at occurence rate across all observations (the Mean)
 summary(spec)
 #Hence, we select Cxperpre and Anatropre for our first analysis:
-y <- spec[,c("Cxperpre", "Anatropre")]
+y <- as_tibble(spec[,c("Cxperpre", "Anatropre")])
 
 #Normalizing Covariates: Otherwise, interaction terms hardy interpretable and skewed
 df[,17:36] <- scale(df[,17:36])
