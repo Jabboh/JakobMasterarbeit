@@ -12,7 +12,7 @@
 #6.1. In-sample (not on test data) or maybe model exploration?:
 #a. Comparing the coefficients: Size and credibility intervals
 #b. Correlations between the responses / Residual Correlation Parameter of gjam
-#c. Response Curves ("in-s
+#c. Response Curves 
 #d. Variable importance
 #6.2. Out-of-Sample
 #a. Conditional Predictions of gjam vs. Unconditional Predictions of 

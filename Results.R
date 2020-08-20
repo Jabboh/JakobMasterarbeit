@@ -25,7 +25,6 @@ library(dplyr) # for simplified syntax and neater code
 library(corrplot)
 library(loo) #to calculate WAIC
 library(bayesplot) #Some handy features for plotting in the Bayesian realm
-library(gridExtra) # for plotting multiple graphs in one window
 
 #### 1.Data Preperation
 #read in the data (Monthly species PA data for seven different mosquito species
@@ -66,7 +65,7 @@ spec[,"An_atroparvus"] <- NULL
 #Taking a look at occurence rate across all observations (the Mean)
 summary(spec)
 #Hence, we select Cxperpre and Anatropre for our first analysis:
-y <- spec[,c("Cxperpre", "Anatropre")]
+y <- as_tibble(spec[,c("Cxperpre", "Anatropre")])
 
 #Normalizing Covariates: Otherwise, interaction terms hardy interpretable and skewed
 df[,17:36] <- scale(df[,17:36])
@@ -916,3 +915,368 @@ for( i in levels(xdata$Mes)){
 }
 plots_uv_con[[1]]
 #same pattern every month
+
+#############################6.1d Variable Importance with DALEX################################
+###################################### For Culex perexiguus
+##################for univariate model
+
+#Define our covariates as xdata
+xdata <- train[,c("Mes", "IA_500", "NDVIBEF_2000")]
+# create custom predict function for rstanarm "posterior_predict" function
+#We take the mean of the simulations as the prediction  on the probability-scale. Reason: Easier
+#to retrieve these values in gjam
+pred_uv <- function(model, newdata)  {
+  return(posterior_predict(model, newdata) %>% apply(2, mean))
+}
+
+#create the explain object (core object of DALEX) which contains the data and
+#the predict function
+dal_cp <- explain(fit_fin_cp, xdata, y = train$Cxperpre, predict_function = pred_uv,
+                  type = "classification", label = "Univariate Probit")
+
+
+# calculate the permutation-based variable importance measure (Here: the difference in
+#(1-AUC) between original data and permuted data per covariate)
+set.seed(1980)
+vi_cp <- model_parts(dal_cp, type = "difference", B = 50)
+
+#plot the results
+plot(vi_cp) + 
+  labs(title = "Variable Importance over 50 Permuations", subtitle = "created for the univariate probit model of Culex perexiguus") 
+#So, Mes is the  most important variable, followed by IA_500 and at last 
+#NDVIBEF_2000. When permuting the Mes variable entries and then predicting
+#our response, the resulting AUC is roughly .11 worse than for the 
+#predictions without the permutations. 
+
+
+##################For gjam unconditional predictions
+
+# create custom predict function, this is a little trickier, because we need
+#to feed it xdata with the three columns (Mes, IA_500 and NDVIBEF) (bc we 
+#want to get the variable importance of these three variables), but for
+#gjamPredict we need to modify the data so that the function works.
+pred_gj <- function(model, newdata)  {
+  #prepare data for prediction
+  #convert the factor mes to dummies
+  newdata <- gjamDummy(newdata$Mes, newdata)
+  #add quadratic terms
+  newdata$"I(IA500^2)" <- (newdata$IA_500)^2
+  newdata$"I(NDVIBEF2000^2)" <- (newdata$NDVIBEF_2000)^2
+  
+  #make a newdata list for gjam
+  newdata <- list(xdata = newdata, nsim = 4000)
+  #Doing the predictions
+  pre <- gjamPredict(output = model, newdata = newdata)
+  #return the mean of the y-chains for every observation as the predictions
+  return(pre$sdList$yMu[,1])
+}
+
+#make the explainer
+dal_cpgj <- explain(joint_fin, xdata, y = train$Cxperpre,
+                    predict_function = pred_gj, type = "classification",
+                    label = "Unconditional Multivariate Probit")
+
+#permutation-based variable importance measure
+set.seed(1980)
+vi_cpgj <- model_parts(dal_cpgj, type = "difference", B = 50) 
+
+#plot the results
+plot(vi_cpgj) + labs(title = "Variable Importance over 50 Permutations", subtitle = "created for the multivariate probit model of Culex perexiguus")
+#Most important variable is IA_500, then Mes and then NDVIBEF_2000. This is slightly different than
+#for the univariate case, but is the difference significant?
+
+################## Conditional multivariate predictions
+
+#plotting the two: 
+#adding the other prediction types
+d_gg <- tibble(var = c(vi_cp$variable, vi_cpgj$variable), loss = c(vi_cp$dropout_loss, vi_cpgj$dropout_loss), type = c(vi_cp$label, vi_cpgj$label))
+#converting var and type to a factor
+d_gg$var <- factor(d_gg$var, levels = c("NDVIBEF_2000", "IA_500", "Mes", "_baseline_", "_full_model_"))
+d_gg$type <- factor(d_gg$type, levels = c("Univariate Probit", "Unconditional Multivariate Probit"))
+
+#deleting baseline and full model 
+d_gg <-d_gg[!(d_gg$var == "_full_model_" | d_gg$var == "_baseline_"),]
+
+
+ggplot(d_gg, aes(x = loss, y = var)) +
+  geom_boxplot(aes(color = type)) + # Boxplot shows Boxes: 25% and 75 % Quantile; vertical line: median; lower whisker = smallest observation greater than or equal to lower hinge - 1.5 * IQR
+  facet_wrap(~type, nrow =3) +
+  labs(title = "Variable Importance Boxplots",
+       subtitle = "Created for multi- and univariate models of Culex perexiguus with 50 permutation runs", y = "Variable",
+       x = "(1 - AUC)-Loss after Permutations") +
+  # Suppress the legend since color isn't actually providing any information
+  theme(legend.position = "none") 
+
+
+#################################### Conditional multivariate predictions
+
+
+
+#xdata with PA of Anopheles. This way, we treat the PA-data like a variable for which we can
+#calculate VI
+xdata_con <- as_tibble(cbind(xdata, y_train[,2]))
+
+#make the predict function, including PA-anopheles as a covariate to
+#permute/manipulate
+pred_con <- function(model, newdata){
+  #prepare data for prediction
+  #convert the factor mes to dummies
+  newdata <- gjamDummy(newdata$Mes, newdata) %>% as_tibble()
+  #add quadratic terms
+  newdata$"I(IA500^2)" <- (newdata$IA_500)^2
+  newdata$"I(NDVIBEF2000^2)" <- (newdata$NDVIBEF_2000)^2
+  #make a newdata list for gjam
+  newdata <- list(xdata = newdata, ydataCond = newdata[,match("Anatropre", names(newdata))], nsim = 4000)
+  #Doing the predictions
+  pre <- gjamPredict(output = model, newdata = newdata)
+  #return the mean of the y-chains for every observation
+  return(pre$sdList$yMu[,1])
+}
+
+#make the explainer
+dal_cp_con <- explain(joint_fin, xdata_con, y = train$Cxperpre,
+                      predict_function = pred_con, type = "classification")
+
+#permutation-based variable importance measure
+set.seed(1980)
+#DOing it for 10 permutations
+vi_cp_con <- model_parts(dal_cp_con, type = "difference", B = 50)
+
+#plotting the results
+plot(vi_cp_con) + labs(title = "Variable Importance", subtitle = "created for the multivariate probit model of Culex perexiguus conditional on Anopheles troparvus")
+#Anatrope label muss noch geändert werden
+#Anopheles is the most important variable, followed by IA_500 and Mes. So, the environmental 
+#covariates have the same order as in the unconditional case. But their magnitude is way smaller.
+#The reason is that the PA-data takes away some of the predictive power of the environmental 
+#covariates.
+
+
+###########################################################################
+######################################For Anopheles
+################## For Univariate Probit Model
+#make the explainer
+dal_at <- explain(fit_fin_at, xdata, y = train$Anatropre, predict_function = pred_uv,
+                  type = "classification", label = "Univariate Probit")
+
+
+# calculate the permutation-based variable importance measure 
+set.seed(1980)
+vi_at <- model_parts(dal_at, type = "difference", B = 50)
+#plot it
+plot(vi_at) + 
+  labs(title = "Variable Importance over 50 Permuations", subtitle = "created for the univariate probit model of Anopheles troparvus") 
+#So, Mes is the  most important variable, followed by NDVIBEF_2000 and at last 
+#IA_500. When permuting the Mes variable entries and then predicting
+#our response, the resulting AUC is roughly .2 worse than for the 
+#predictions without the permutations. 
+
+##################For unconditional predictions in gjam
+
+#We need to slightly change our predict function (just the last line) compared to the Culex case
+pred_gjat <- function(model, newdata)  {
+  #prepare data for prediction
+  #convert the factor mes to dummies
+  newdata <- gjamDummy(newdata$Mes, newdata)
+  #add quadratic terms
+  newdata$"I(IA500^2)" <- (newdata$IA_500)^2
+  newdata$"I(NDVIBEF2000^2)" <- (newdata$NDVIBEF_2000)^2
+  
+  #make a newdata list for gjam
+  newdata <- list(xdata = newdata, nsim = 4000)
+  #Doing the predictions
+  pre <- gjamPredict(output = model, newdata = newdata)
+  #return the mean of the y-chains for every observation, this time of at
+  return(pre$sdList$yMu[,2])
+}
+#make the explainer
+dal_atgj <- explain(joint_fin, xdata, y = train$Anatropre,
+                    predict_function = pred_gjat, type = "classification", 
+                    label = "Unconditional Multivariate Probit")
+
+#permutation-based variable importance measure
+set.seed(1980)
+vi_atgj <- model_parts(dal_atgj, type = "difference", B = 50) 
+#pretty similar to univariate model!
+
+#plot the results
+plot(vi_atgj) + labs(title = "Variable Importance over 50 Permutations", subtitle = "created for the multivariate probit model of Anopheles troparvus")
+#Most important variable is Mes, then NDVI_BEF and then IA, similar results as for the univariate
+#model
+
+#Plotting VI of both models in one plot
+
+# making a dataframe with all the important data: 1. The variable which is permuted, 2. the drop 
+#out loss for every run and 3. the according model type labels
+d_ggat <- tibble(var = c(vi_at$variable, vi_atgj$variable),
+                 loss = c(vi_at$dropout_loss, vi_atgj$dropout_loss),
+                 type = c(vi_at$label, vi_atgj$label))
+#converting var and type to a factor
+d_ggat$var <- factor(d_ggat$var, levels = c("IA_500", "NDVIBEF_2000", "Mes", "_full_model_", 
+                                            "_baseline_"))
+d_ggat$type <- factor(d_ggat$type, levels = c("Univariate Probit", "Unconditional Multivariate Probit"))
+
+#deleting baseline and full model 
+d_ggat <-d_ggat[!(d_ggat$var == "_full_model_" | d_ggat$var == "_baseline_"),]
+
+
+ggplot(d_ggat, aes(x = loss, y = var)) +
+  geom_boxplot(aes(color = type)) + # Boxplot shows Boxes: 25% and 75 % Quantile; vertical line: median; lower whisker = smallest observation greater than or equal to lower hinge - 1.5 * IQR
+  facet_wrap(~type, nrow =3) +
+  labs(title = "Variable Importance Boxplots",
+       subtitle = "Created for multi- and univariate models of Anopheles troparvus with 50 permutation runs", y = "Variable",
+       x = "(1 - AUC)-Loss after Permutations") +
+  # Suppress the legend since color isn't actually providing any information
+  theme(legend.position = "none") 
+
+##################Doing it for conditional predictions
+#Treat the conditioning as a covariate (inlcude it as one variable in your
+#variable importance analysis)
+
+#xdata with PA of Culex
+xdata_con <- as_tibble(cbind(xdata, y_train[,1]))
+
+#make the predict function, including PA-Culex as a covariate to
+#permute/manipulate
+pred_atcon <- function(model, newdata)  {
+  #prepare data for prediction
+  #convert the factor mes to dummies
+  newdata <- gjamDummy(newdata$Mes, newdata) %>% as_tibble()
+  #add quadratic terms
+  newdata$"I(IA500^2)" <- (newdata$IA_500)^2
+  newdata$"I(NDVIBEF2000^2)" <- (newdata$NDVIBEF_2000)^2
+  #make a newdata list for gjam
+  newdata <- list(xdata = newdata, ydataCond = newdata[,match("Cxperpre", names(newdata))], nsim = 4000)
+  #Doing the predictions
+  pre <- gjamPredict(output = model, newdata = newdata)
+  #return the mean of the y-chains for every observation
+  return(pre$sdList$yMu[,2])
+}
+
+#make the explainer
+dal_at_con <- explain(joint_fin, xdata_con, y = train$Anatropre,
+                      predict_function = pred_atcon, type = "classification")
+
+#permutation-based variable importance measure
+set.seed(1980)
+#DOing it for 10 permutations
+vi_at_con <- model_parts(dal_at_con, type = "difference", B = 50)
+
+#plotting the results
+plot(vi_at_con) + labs(title = "Variable Importance", subtitle = "created for the multivariate probit model of Anopheles troparvus conditional on Culex perexiguus")
+#Anatrope label muss noch geändert werden
+#Culex isnt that important o_o; is that in accordance with the AUCs? AUC is just a little over .01
+#better for conditional model >> So, I guess so!
+#Mes variable does not lose much of its importance measured in dif. The other two variables lose 
+#considerably.
+
+
+##################################################6.2. Out-of-Sample
+#a. Conditional Predictions of gjam vs. Unconditional Predictions of 
+#gjam vs. predictions of univariate model
+
+#We evaluate predictive performance on our test set with the AUC
+#####For Culex perexiguus
+#We make the three predictions ((i) univariate, (ii) unconditional multivariate and (iii)
+#conditional multivariate)
+
+###(i) univariate predictions on the observation scale
+pred_cp_uv <- posterior_predict(fit_fin_cp, newdata = test, seed = 333)
+#take the average of these draws per observation as an estimation of the 
+# "expected" predicted y-value/predicted probability of occurence
+pred_cp_uv <- colMeans((pred_cp_uv))
+#AUC
+auc_cp_uv <- auc(response = test$Cxperpre, predictor = pred_cp_uv)
+auc_cp_uv
+#a AUC of .76 >> is ok for our purposes
+
+###Unconditional multivariate
+#predictions
+#preparing the test data for gjam
+# getting rid of all the unused variables
+test_gj <- test[,c("Mes", "IA_500", "NDVIBEF_2000")] 
+#month dummies
+test_gj <- gjamDummy(test_gj$Mes, test_gj)
+#adding intercept
+test_gj$intercept <- rep(1 , nrow(test_gj)) 
+#adding the squared terms
+test_gj$"I(IA500^2)" <- (test_gj$IA_500)^2
+test_gj$"I(NDVIBEF_2000^2)" <- (test_gj$NDVIBEF_2000)^2
+#define the modelling settings for unconditional predictions with test_gj
+newdata <- list(xdata = test_gj, nsim = 4000)
+#calculating the in-sample predictions (simulations)
+pred_cp_gj_un <- gjamPredict(output = joint_fin, newdata = newdata)
+#retrieving the predictions (the mean of the simulations)
+pred_cp_gj_un <- pred_cp_gj_un$sdList$yMu[,1] 
+#AUC
+auc_cp_mvun <- auc(response = test$Cxperpre, predictor = pred_cp_gj_un)
+auc_cp_mvun
+#AUC roughly .76 >> the same as the univariate model >> corroborates our hypothesis
+
+###Plot the univariate conditions against the unconditional multivariate ones
+d_gg_uc_cp <- data.frame(cbind(pred_cp_uv, pred_cp_gj_un, y_test$Cxperpre))
+names(d_gg_uc_cp) <- c("cp_uv", "cp_mv_un", "cp")
+uvvsmvun_cp <- ggplot(d_gg_uc_cp, aes(x=cp_uv, y=cp_mv_un, color=factor(cp))) + geom_point() +
+  ggtitle("Univariate vs. Unconditional Multivariate Predictions for Culex Perexiguus") +
+  xlab("Predictions from Univariate Probit ") + 
+  ylab("Unconditional Predictions from Multivariate Probit") +
+  labs(color = "True PA of Culex Perexiguus") + ylim(0, 1)
+uvvsmvun_cp
+#They look as if they are centered around the identity line >> the predictions are more or less 
+#the same! There is a slight tendency, though: For low predictions multivariate predictions are
+#higher than univariate, but for high predictions univariate predictions are higher than 
+#multivariate ones.
+
+###Conditional predictions
+#Culex perexiguus conditioned on Anopheles atroparvus
+#storing input data in newdata, inclduing the PA of Anopheles
+set.seed(333)
+newdata <- list(xdata = test_gj, ydataCond = y_test[,2], nsim = 4000) # conditionally predict out-of-sample
+#Doing the actual prediction
+pred_cp_mvco      <- gjamPredict(output = joint_fin, newdata = newdata)
+#retrieving the predictions (the mean of the simulations)
+p_cp_mvco <- pred_cp_mvco$sdList$yMu[,1] 
+#AUC
+auc_cp_mvco <- auc(response = test$Cxperpre, predictor = p_cp_mvco)
+auc_cp_mvco
+#AUC roughly .81 >> So, there is a considerable improvement of .05 in AUC >> corroborates
+#our hypothesis that PA data enhances predictions :)
+
+#Plotting Univariate Predictions vs. Conditional Multivariate Predictions
+d_gg_cp <- data.frame(cbind(pred_cp_uv, p_cp_mvco, pred_cp_mvco$prPresent[,2], y_test$Cxperpre))
+names(d_gg_cp) <- c("cp_uv", "cp_mv", "at", "cp")
+provsgj_cp <- ggplot(d_gg_cp, aes(x=cp_uv, y=cp_mv, color=factor(at), shape = factor(cp))) + geom_point() +
+  ggtitle("Univariate vs. Conditional Multivariate Predictions for Culex Perexiguus") +
+  xlab("Predictions from Univariate Probit ") + ylab("Conditional Predictions from GJAM") +
+  labs( color = "PA of Anopheles Atroparvus", shape = "PA of Culex Perexiguus") + ylim(0,1)
+provsgj_cp
+#You can see that there is a positive linear relationship between the predictions
+#of the two models grouped by the PA of Anopheles Atroparvus (the species we conditioned on).
+#This indicates
+#that both models roughly do the same/environmental signals are treated similarily.
+#The slopes of the two lines are not equal to 1 (Would we expect this? I think, we do, if we 
+#assume that the environmental coefficients are the same PUH, I still dont know the answer
+#to this question). You can see that the conditioning on 
+#Anapheles Atroparvus has a clear effect (The blue and red points form two distinct groups)
+#on the multivariate predictions compared to the univariate predictions. The multivariate model
+#predicts a roughly 12.5 % points
+#higher probability of occurence for plots where Anopheles Atroparvus is present compared to
+#plots where it's absent.
+
+
+
+#####for Anopheles atroparvus
+#Univariate Predictions
+pred_at_uv <- posterior_predict(fit_fin_at, newdata = test, seed = 333)
+pred_at_uv <- colMeans((pred_at_uv))
+
+####AUC
+perf_cp_sin <- auc(response = test$Cxperpre, predictor = pred_exp_cp_sin)
+perf_cp_sin
+#AUC = .74 >> seems ok for our purposes (remember: our goal is not to find the perfect
+#model for our data, but rather evaluate whether knowing one species helps our predictions
+#of the other one
+perf_at_sin <- auc(response = test$Anatropre, predictor = pred_exp_at_sin)
+perf_at_sin
+#AUC = .77 >> seems OK for our purposes
+
+
