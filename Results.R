@@ -26,6 +26,8 @@ library(corrplot)
 library(loo) #to calculate WAIC
 library(bayesplot) #Some handy features for plotting in the Bayesian realm
 library(matrixStats)#for quantile calculations
+library(ggplot2)#for plotting
+library(DALEX)#For Variable Importance
 
 #### 1.Data Preperation
 #read in the data (Monthly species PA data for seven different mosquito species
@@ -112,9 +114,9 @@ ml   <- list(ng = 4000, burnin = 1000, typeNames = types)
 joint_fin <- gjam(~  Mayo + Junio + Julio + Agosto + Septiembre + IA_500 +
                     NDVIBEF_2000 + I(IA_500^2) + I(NDVIBEF_2000^2),
                   ydata = y_train, xdata = train_gj, modelList = ml)
-
+##############################################################################################
 ####6. Results
-###6.1. In-sample:
+#######################################6.1. In-sample:########################################
 ##a. Comparing the coefficients: Size, Significance and credibility intervals
 #Plotting all the coefficients in one plot per species
 #CP
@@ -202,7 +204,7 @@ se_sum_at
 #Everything looks pretty similar as expected. Difference between coefficients way smaller than according SEs.
 #only exception is september dummy, but for that the SE is also very large.
 
-###Correlation between the responses (raw vs. residual correlation)
+################6.1b Correlation between the responses (raw vs. residual correlation)##########
 #raw correlation
 cor(spec$Cxperpre, spec$Anatropre) #pearson correlation coefficient
 
@@ -222,7 +224,7 @@ joint_fin$parameters$corMu #It's the pearson correlation coefficient (for two
 #dummies are different)! But there is still a lot of unexplained Correlation
 #(are you sure? What's the natural level? I guess 0)
 
-###c. Response Curves
+###################################c. Response Curves#########################################
 ##For Culex perexiguus
 
 ###Response Curve für IA_500 :predict the probability of presence for the different ia-values,
@@ -1170,9 +1172,9 @@ plot(vi_at_con) + labs(title = "Variable Importance", subtitle = "created for th
 #Mes variable does not lose much of its importance measured in dif. The other two variables lose 
 #considerably.
 
-
-##################################################6.2. Out-of-Sample
-#a. Conditional Predictions of gjam vs. Unconditional Predictions of 
+##############################################################################################
+##################################################6.2. Out-of-Sample##########################
+###############a. Conditional Predictions of gjam vs. Unconditional Predictions of############
 #gjam vs. predictions of univariate model
 
 #We evaluate predictive performance on our test set with the AUC
@@ -1294,14 +1296,14 @@ newdata <- list(xdata = test_gj, nsim = 4000)
 #calculating the in-sample predictions (simulations)
 pred_at_gj_un <- gjamPredict(output = joint_fin, newdata = newdata)
 #retrieving the predictions (the mean of the simulations)
-pred_at_gj_un <- pred_at_gj_un$sdList$yMu[,2] 
+p_at_gj_un <- pred_at_gj_un$sdList$yMu[,2] 
 #AUC
-auc_at_mvun <- auc(response = test$Anatropre, predictor = pred_at_gj_un)
+auc_at_mvun <- auc(response = test$Anatropre, predictor = p_at_gj_un)
 auc_at_mvun
 #AUC roughly .84 >> roughly the same as the univariate model >> corroborates our hypothesis
 
 ###Plot the univariate conditions against the unconditional multivariate ones
-d_gg_uc_at <- data.frame(cbind(pred_at_uv, pred_at_gj_un, y_test$Anatropre))
+d_gg_uc_at <- data.frame(cbind(pred_at_uv, p_at_gj_un, y_test$Anatropre))
 names(d_gg_uc_at) <- c("at_uv", "at_mv_un", "at")
 d_gg_uc_at$at <- factor(d_gg_uc_at$at, levels = c(0, 1), labels = c("absent", "present"))
 
@@ -1349,7 +1351,7 @@ provsgj_at
 #as in the unconditional vs. uv-plot: for low predictions mv has higher predictions and for 
 #high predictions the other way around.
 
-####################################6.2b Uncertainty in the predictions
+####################################6.2b Uncertainty in the predictions#######################
 #We take a look at the dispersion of the predictions for the three prediction types.  
 
 ######For Culex perexiguus
@@ -1367,7 +1369,10 @@ sd_cp_mvco <- apply(pred_cp_mvco$ychains[,1:140], 2, sd) %>% mean
 #DAMN, the sd (.25) is way higher than in the univariate case >> would mean that the condtional 
 #predictions are a lot more uncertain; slightly lower than the unconditional predictions.
 #So, the uncertainty is probably induced by the different modelling approaches (multi vs. 
-#univariate + difference in fitting between gjam and rstanarm), not the conditioning. 
+#univariate + difference in fitting between gjam and rstanarm), not the conditioning. I think,
+#the reason is that gjam additonally (to the linear predictor with the environmental 
+#covariates)draws the residual error from the multivariate normal distribution>> 
+#More dispersion
 
 #Plotting uncertainties of predictions with boxplots for single randomly drawn observations
 i <- sample(seq_len(nrow(test)), size = 1)
@@ -1384,43 +1389,112 @@ d_gg_bpso$obs <- i
 #lower whisker = smallest observation greater than or equal to lower hinge - 1.5 * IQR; 
 #points: "remaining" outliers (die Erläuterungen komm in den Text unter der Abbildung)
 ggplot(d_gg_bpso, aes(x = pred, y = type)) +
-  geom_boxplot(aes(color = type)) + labs(title = paste0("Boxplot of 4000-simulated Predictions for Observation ", i), y = "Prediction Type",
+  geom_boxplot(aes(color = type)) + labs(title = paste0("Boxplot of 4000-simulated Predictions for Observation ", i),
+                                         y = "Prediction Type",
+                                         subtitle = "Culex perexiguus",
                                          x = "Prediction on the Probability Scale") + 
   theme(legend.position = "none") 
+#>> We see that the univariate boxplot is much narrower
 
-#95$-Confidence Interval around predictions along an environment gradient for all three
-#prediction types
+####95%-Confidence bands of predictions along predicted probabilities of all three predictions
+#types
 
-#dataframe for the mean of the predictions for every observation
+#calculate the .025 and .975 quantiles for each prediction type and each observation on the
+#simulated predictions
+quant_cpuv <- colQuantiles(pred_cpuv, probs=c(.025, .975))
+quant_cpun <- colQuantiles(pred_cp_gj_un$ychains[,1:140], probs=c(.025, .975))
+quant_cpco <- colQuantiles(pred_cp_mvco$ychains[,1:140], probs=c(.025, .975))
 
-mean_pred <- data.frame(single = c(pred_cp_uv, p_cp_gj_un, p_cp_mvco),
-                        type = c(rep("Univariate", length(pred_cp_uv)),
-                                rep("Unconditional Multivariate", length(p_cp_gj_un)),
-                                rep("Conditional Multivariate", length(p_cp_mvco))),
-                        IA_500 = rep(test$IA_500, 3),
-                        NDVIBEF_2000 = rep(test$NDVIBEF_2000, 3))
+#make the data frame for the "cedribility intervall"confidence band" (correct word choice?)
+#(ribbon argument of ggplot)
+frame_cp <- data.frame(lower = c(quant_cpuv[,1], quant_cpun[,1], quant_cpco[,1]),
+                         upper = c(quant_cpuv[,2], quant_cpun[,2], quant_cpco[,2]),
+                         single = c(pred_cp_uv, p_cp_gj_un, p_cp_mvco),
+                         type = factor(c(rep("Univariate Predictions", length(pred_cp_uv)),
+                                rep("Unconditional Multivariate Predictions", length(p_cp_gj_un)),
+                                rep("Conditional Multivariate Predictions", length(p_cp_mvco))),
+                                levels = c("Univariate Predictions", "Unconditional Multivariate Predictions",
+                                           "Conditional Multivariate Predictions")))
 
-uv <- pred_cpuv %>% t %>% as.vector()
-un <- pred_cp_gj_un$ychains[,1:140] %>% t %>% as.vector()
-co <- pred_cp_mvco$ychains[,1:140] %>% t %>% as.vector()
-d_gg_bpenv <- data.frame(pred = c(uv, un, co), IA_500 = rep(test$IA_500, nrow(pred_cpuv)),
-                         NDVIBEF_2000 = rep(test$NDVIBEF_2000, nrow(pred_cpuv)),
-                         type = c(rep("Univariate", length(uv)),
-                                  rep("Unconditional Multivariate", length(un)),
-                                  rep("Conditional Multivariate", length(co)))) 
+#make the plot
+ggplot(frame_cp, aes(single, single))+
+  geom_line() +
+  geom_ribbon(data=frame_cp,aes(ymin=lower,ymax=upper),alpha=0.3) +
+  facet_wrap(~type, nrow =3)+ 
+  labs(title = "95%-Confidence Bands of Predictions", subtitle = "Culex perexiguus",
+       y = "Prediction", x = "Prediction")
 
+#confidence bands for the the multivariate predictions are much, much broader (Hypothesis 2).
+#Unconditional and condtional predictions seem to behave similarly
 
-#First Plot a line with the mean-predictions
-ggplot(mean_pred, aes(IA_500, single, color = type))+
-  geom_point()
-#That doesnt make sense, maybe with the response curves? But, then it has nothing to do with 
-#the test data
-pred_cpuv
+####################For Anopheles
+###For the univariate model
+pred_atuv <- posterior_linpred(fit_fin_at, transform = T, newdata = test, seed = 333)
 
-mean_cpuv <- data.frame(single = pred_cp_uv)
-frame_cpuv <- data.frame(lower = ))
+#mean of the (standard deviations of the  predictions per observation)
+sd_atuv <- apply(pred_atuv, 2, sd) %>% mean
+#sd roughly .06
+#for the unconditional predictions
+sd_at_mvun <- apply(pred_at_gj_un$ychains[,141:280], 2, sd) %>% mean
+#sd (.23) is a lot higher than for the univariate case
+#for the conditional predictions
+sd_at_mvco <- apply(pred_at_mvco$ychains[,141:280], 2, sd) %>% mean
+#the sd (.22) is way higher than in the univariate case >> would mean that the condtional 
+#predictions are a lot more uncertain; slightly lower than the unconditional predictions.
+#So, the uncertainty is probably induced by the different modelling approaches (multi vs. 
+#univariate + difference in fitting between gjam and rstanarm), not the conditioning. I think,
+#the reason is that gjam additonally (to the linear predictor with the environmental 
+#covariates)draws the residual error from the multivariate normal distribution>> 
+#More dispersion
 
-row.Quantiles(pred_cpuv) #Das Hier zum Laufen bringen, wenn nicht https://stackoverflow.com/questions/46717477/apply-function-quantile-to-matrix-rows-and-use-result-to-modify-row
-ggplot(mean_cpuv, aes(single, single))+
-  geom_point() +
-geom_ribbon(data=predframe,aes(ymin=lwr,ymax=upr),alpha=0.3))
+#Plotting uncertainties of predictions with boxplots for single randomly drawn observations
+
+#make the dataframe with all the predictions of observation i for all three prediction types
+d_gg_bpso <- data.frame(c(pred_atuv[,i], pred_at_gj_un$ychains[,140+i], pred_at_mvco$ychains[,140+i]))
+names(d_gg_bpso) <- c("pred")
+#adding a column with the prediction types
+d_gg_bpso$type <- c(rep("Univariate", length(pred_atuv[,i])),
+                    rep("Unconditional Multivariate", length(pred_at_gj_un$ychains[,i])),
+                    rep("Conditional Multivariate", length(pred_at_mvco$ychains[,i])))
+d_gg_bpso$obs <- i
+# Boxplot shows Boxes: 25% and 75 % Quantile; vertical line: median;
+#lower whisker = smallest observation greater than or equal to lower hinge - 1.5 * IQR; 
+#points: "remaining" outliers (die Erläuterungen komm in den Text unter der Abbildung)
+ggplot(d_gg_bpso, aes(x = pred, y = type)) +
+  geom_boxplot(aes(color = type)) + labs(title = paste0("Boxplot of 4000-simulated Predictions for Observation ", i),
+                                         subtitle = "Anopheles troparvus",
+                                         y = "Prediction Type",
+                                         x = "Prediction on the Probability Scale") + 
+  theme(legend.position = "none") 
+#>> We see that the univariate boxplot is much narrower
+
+####95%-Confidence bands of predictions along predicted probabilities of all three predictions
+#types
+
+#calculate the .025 and .975 quantiles for each prediction type and each observation on the
+#simulated predictions
+quant_atuv <- colQuantiles(pred_atuv, probs=c(.025, .975))
+quant_atun <- colQuantiles(pred_at_gj_un$ychains[,141:280], probs=c(.025, .975))
+quant_atco <- colQuantiles(pred_at_mvco$ychains[,141:280], probs=c(.025, .975))
+
+#make the data frame for the "cedribility intervall"confidence band" (correct word choice?)
+#(ribbon argument of ggplot)
+frame_at <- data.frame(lower = c(quant_atuv[,1], quant_atun[,1], quant_atco[,1]),
+                       upper = c(quant_atuv[,2], quant_atun[,2], quant_atco[,2]),
+                       single = c(pred_at_uv, p_at_gj_un, p_at_mvco),
+                       type = factor(c(rep("Univariate Predictions", length(pred_at_uv)),
+                                       rep("Unconditional Multivariate Predictions", length(p_at_gj_un)),
+                                       rep("Conditional Multivariate Predictions", length(p_at_mvco))),
+                                     levels = c("Univariate Predictions", "Unconditional Multivariate Predictions",
+                                                "Conditional Multivariate Predictions")))
+
+#make the plot
+ggplot(frame_at, aes(single, single))+
+  geom_line() +
+  geom_ribbon(data=frame_at,aes(ymin=lower,ymax=upper),alpha=0.3) +
+  facet_wrap(~type, nrow =3)+ 
+  labs(title = "95%-Confidence Bands of Predictions", subtitle = "Anopheles troparvus",
+       y = "Prediction", x = "Prediction")
+
+#confidence bands for the the multivariate predictions are much, much broader (Hypothesis 2).
+#Unconditional and condtional predictions seem to behave similarly,
