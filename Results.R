@@ -1,4 +1,4 @@
-#############################Results of my analyis
+#############################Results of my analyis#############################################
 #1. Data preparation and fitting of final model
 #6. Results
 #6.1. In-sample (not on test data):
@@ -29,7 +29,7 @@ library(matrixStats)#for quantile calculations
 library(ggplot2)#for plotting
 library(DALEX)#For Variable Importance
 
-#### 1.Data Preperation
+#####################################1.Data Preperation#######################################
 #read in the data (Monthly species PA data for seven different mosquito species
 #and according environmental covariates)
 df <- read_excel("MonthlyData.xlsx")
@@ -37,7 +37,7 @@ df <- read_excel("MonthlyData.xlsx")
 #Checking the rough structure of the data set
 str(df)
 summary(df$Fecha) # Dates in 2006 dont make any sense. I assume that they put by
-#accident 2006 instead of 2010. So I change these dates
+#accident 2006 instead of 2010. So I change these dates.
 df$Fecha <- as.POSIXct(sub("2006", "2010", df$Fecha))
 
 #Transform "Mes" (month when record was taken) into a factor variable
@@ -56,18 +56,12 @@ df[,"trap"] <- lapply(df[,"trap"], gsub, pattern = "Ca?da", replacement = "Caña
 #adding lon-lat column to the data frame df
 df <- merge(df, coords[, c("trap", "Norte", "Oeste")], by="trap", all.x= T, sort = F)
 
-#Selecting our two species (perexiguus & Anopheles troparvus) for the analysis. Our
-#rationale is to select the two species that roughly occur in 50 % of the observations
-#in order to get the maximum variation. We ignore the column "An_atroparvus", 
-#because it does not seem to be PA-data (rather abundance data).
-
+#Selecting our two species (perexiguus & Anopheles troparvus) for the analysis.
 #extract the PA data for all species
 spec <- df[,7:14]
-#deleting the An_atroparvus column
+#deleting the An_atroparvus column, because this is not PA-data
 spec[,"An_atroparvus"] <- NULL
-#Taking a look at occurence rate across all observations (the Mean)
-summary(spec)
-#Hence, we select Cxperpre and Anatropre for our first analysis:
+#we select Cxperpre and Anatropre for our first analysis:
 y <- as_tibble(spec[,c("Cxperpre", "Anatropre")])
 
 #Normalizing Covariates: Otherwise, interaction terms hardy interpretable and skewed
@@ -93,7 +87,7 @@ y_test <- y[-train_id, ]
 fit_fin_cp <- stan_glm(Cxperpre ~ Mes + IA_500 + NDVIBEF_2000 + I(IA_500^2) + I(NDVIBEF_2000^2),
                        data = train, family = binomial(link = "probit"), init_r = 1.4,  seed = 333)
 
-#for anopheles
+#for anopheles atropovarus
 fit_fin_at <- stan_glm(Anatropre ~ Mes + IA_500 + NDVIBEF_2000 + I(IA_500^2) +  I(NDVIBEF_2000^2),
                        data = train, family = binomial(link = "probit"), init_r = 1.4, seed = 333)
 
@@ -115,22 +109,29 @@ joint_fin <- gjam(~  Mayo + Junio + Julio + Agosto + Septiembre + IA_500 +
                     NDVIBEF_2000 + I(IA_500^2) + I(NDVIBEF_2000^2),
                   ydata = y_train, xdata = train_gj, modelList = ml)
 ##############################################################################################
-####6. Results
+#######################################6. Results#############################################
 #######################################6.1. In-sample:########################################
 ##a. Comparing the coefficients: Size, Significance and credibility intervals
 #Plotting all the coefficients in one plot per species
-#CP
+
+####For Culex perexiguus
 #https://github.com/stan-dev/bayesplot/issues/232
 #The posteriors of both models
-posterior_1 <- as.matrix(fit_fin_cp) #rstanarm nimmt den median als Schätzer für den Parameter
+#rstanarm takes the median as the parameter estimate
+#We also take the median in the following graphs
+posterior_1 <- as.matrix(fit_fin_cp) 
 posterior_2 <- as.matrix(joint_fin$chains$bgibbsUn[,1:10])
 colnames(posterior_2) <- colnames(posterior_1)
+
+#create an object that stores the median and the two boundaries for our credibility interval
 combined <- rbind(mcmc_intervals_data(posterior_1, prob_outer = .95), mcmc_intervals_data(posterior_2, prob_outer = .95))
 combined$model <- rep(c("Univariate Model", "Multivariate Model"), each = ncol(posterior_1))
-#prob_outer defines the credibility interval in our plot (here .975)
+#prob_outer defines the credibility interval in our plot (here .95)
+
+#plot the parameters of both models and the respective credibility intervals
 theme_set(bayesplot::theme_default())
 pos <- position_nudge(y = ifelse(combined$model == "Multivariate Model", 0, 0.1))
-coef_cp <- ggplot(combined, aes(x = m, y = parameter, color = model)) + 
+ggplot(combined, aes(x = m, y = parameter, color = model)) + 
   geom_point(position = pos) +
   geom_vline(xintercept = 0, linetype="dotted", color = "black", size=.5) +
   geom_errorbar(aes(xmin = ll, xmax = hh), position = pos, width = .1) +
@@ -138,13 +139,16 @@ coef_cp <- ggplot(combined, aes(x = m, y = parameter, color = model)) +
   xlab("Value") + ylab("Coefficient") + labs(color="Model") 
 #They look pretty much the same 
 
-#for at
-posterior_1 <- as.matrix(fit_fin_at) #rstanarm nimmt den median als Schätzer für den Parameter
+####for Anopheles atropovarus
+#posteriors of both models
+posterior_1 <- as.matrix(fit_fin_at)
 posterior_2 <- as.matrix(joint_fin$chains$bgibbsUn[,-(1:10)])
 colnames(posterior_2) <- colnames(posterior_1)
+#create an object with median and 95% credibility intervals of the posterior
 combined <- rbind(mcmc_intervals_data(posterior_1, prob_outer = .95), mcmc_intervals_data(posterior_2, prob_outer = .95))
 combined$model <- rep(c("Univariate Model", "Multivariate Model"), each = ncol(posterior_1))
-#prob_outer defines the credibility interval in our plot (here .975)
+
+#plotting parameters with credibility intervals
 pos <- position_nudge(y = ifelse(combined$model == "Multivariate Model", 0, 0.1))
 coef_at <- ggplot(combined, aes(x = m, y = parameter, color = model)) + 
   geom_point(position = pos) +
@@ -154,11 +158,10 @@ coef_at <- ggplot(combined, aes(x = m, y = parameter, color = model)) +
   xlab("Value") + ylab("Coefficient") + labs(color="Model") 
 #They look pretty much the same 
 
-##the hard numbers: Tables with the coefficients and SEs
-#Significance: (guck eigentlich am besten deinen Plot an!)
-summary(joint_fin)
-summary(fit_fin_cp)
-summary(fit_fin_at)
+#set plotting them back to default
+theme_set(theme_grey())
+
+####the hard numbers: Tables with the coefficients and SEs
 
 #Comparison of the coefficients of CP
 #Make a table (dataframe) to store different coefficients and SEs according to the models
@@ -221,21 +224,22 @@ joint_fin$parameters$corMu #It's the pearson correlation coefficient (for two
 
 #residual correlation is smaller >> reason: shared environmental response is
 #accounted for (Most coefficient have the same sign (only a couple of month
-#dummies are different)! But there is still a lot of unexplained Correlation
-#(are you sure? What's the natural level? I guess 0)
+#dummies are different)! But there is still a lot of unexplained Correlation.
+
 
 ###################################c. Response Curves#########################################
-##For Culex perexiguus
+####For Culex perexiguus
 
-###Response Curve für IA_500 :predict the probability of presence for the different ia-values,
-#holding the other covariates at their mean (0) or at a constant factor level (mes)
+###Response Curve für IA_500:predict the probability of presence for different ia-values 
+#(over the range of ia-values in the dataset), holding the other covariates at their mean (0)
+#or at a constant factor level (mes)
 
 #a sequence of IA_500-values from min to max with 50 steps
 ia <- seq(min(df$IA_500), max(df$IA_500), length.out = 50)
 #names of covariates
 nc <- c("IA_500", "NDVIBEF_2000", "Mes")
-#the mean of the covariates is 0, bc I normalized them
-#creating  x-data dataframe with all the avareges (which are zero)
+#the mean of the covariates is 0, bc we normalized them
+#creating  x-data dataframe with all the averages (which are zero)
 data <- as.data.frame(matrix(0, ncol = length(nc), nrow = length(ia)))
 names(data) <- nc  
 #replace IA_500 0s with the sequence from above
@@ -255,26 +259,24 @@ for (i in levels(df$Mes)){
 #Converting Mes to a factor variable
 xdata$Mes <- factor(xdata$Mes, levels =c("Abril", "Mayo", "Junio", "Julio", "Agosto",
                                          "Septiembre"))
-#Run the posterior simulations with xdata, we want the predictions on the "probability scale"
-#That's why we use posterior_linpred with transform = T
-d_res <- posterior_linpred(fit_fin_cp, transform = T, newdata = xdata, seed = 333)
-#getting the predictions on the "probability scale, by taking the mean per 
-#observation/column
+
+#Run the posterior simulations of the univariate model with xdata, we want the predictions on
+#the "probability scale". That's why we use posterior_linpred with transform = T
+d_res <- posterior_predict(fit_fin_cp, newdata = xdata, seed = 333)
+#taking the mean of the posterior simulations as our prediction
 univariate <- colMeans(d_res)
 #adding these predictions to data frame
 ggd <- cbind(xdata, univariate)
-#maiking the plot
-response_cp_uv <- ggplot(data = ggd, aes(x = IA_500, y = univariate, color = Mes)) +
+#maiking the plot "Response Curve of Inundation Area for Culex perexiguus in Univariate Model"
+ggplot(data = ggd, aes(x = IA_500, y = univariate, color = Mes)) +
   geom_point() + ylab("Predicted Probability") + xlab("IA_500 in Standard Units") +
   ggtitle ("Response Curve of Inundation Area for Culex perexiguus in Univariate Model") +
   guides(color=guide_legend(title="Month"))
 
-##Doing the same thing for gjam
+####Doing the same thing for the multivariate model
 
-#for unconditional predictions
+####for unconditional predictions
 #Converting the Mes-Variable to a bunch of dummies as demanded by gjam
-source("gjamDummy.R")
-
 dr_gj <- gjamDummy(xdata$Mes, xdata)
 #rename certain columns to coefficient names of joint_fin output
 names(dr_gj)[1:2] <- c("IA500", "NDVIBEF2000")
@@ -302,20 +304,21 @@ dr_gj <- dr_gj[-nrow(dr_gj),]
 dr_gj$Mes <- ggd$Mes
 #making the ggplot dataframe
 ggd_gj_un <- cbind(dr_gj, pred_gj_un)
-response_cp_un <- ggplot(data = ggd_gj_un, aes(x = IA500, y = pred_gj_un, color = Mes)) +
+#The plot "Response Curve of Inundation Area for Culex perexiguus with Unconditional Predictions \n in Multivariate Model"
+ggplot(data = ggd_gj_un, aes(x = IA500, y = pred_gj_un, color = Mes)) +
   geom_point() + ylab("Predicted Probability") + xlab("IA_500 in Standard Units") +
-  ggtitle ("Response Curve of Inundation Area for Culex perexiguus in GJAM") +
+  ggtitle ("Response Curve of Inundation Area for Culex perexiguus with Unconditional Predictions \n in Multivariate Model") +
   guides(color=guide_legend(title="Month"))
 
-##Plot gjam and rstanarm response curves in the same plot
+#Plot uni- and multivariate response curves in the same plot
 
-#prepare the dataframe to feed into ggplot (just add predictions of gjam to dataframe of rstanarm)
+#prepare the dataframe to feed into ggplot (just add predictions of multivariate to dataframe of univariate)
 
 ggd$multivariate <- ggd_gj_un$pred_gj_un
 
 #Do the ggplot 
 
-response_cp_uv_un <- ggplot(data = ggd, aes(x = IA_500, color = Mes)) +
+ggplot(data = ggd, aes(x = IA_500, color = Mes)) +
   geom_point(aes(y = univariate, shape = "univariate")) + 
   geom_point(aes(y = multivariate, shape = "multivariate")) + ylab("Predicted Probability") + 
   xlab("IA_500 in Standard Units") +
@@ -323,14 +326,16 @@ response_cp_uv_un <- ggplot(data = ggd, aes(x = IA_500, color = Mes)) +
   guides(color=guide_legend(title="Month"), shape = guide_legend(title="Model"))
 
 #Why are the response curves different? Does that contradict our hypothesis that unconditional
-#predictions dont differ from univariate predictions? Why do they cross? (heterogeneous effect (
-#of month depends on value of IA_500)) Why is for september multivariate probability more positive,
-#but for all the other months the univariate model
+#predictions dont differ from univariate predictions? Why do they cross? Increasing IA has
+#a stronger negative effect on predicted probabilities in univariate models.  Why is for
+#september the predicted prob of multivariate model more positive, but for all the other months
+#the predicted probs of univariate models?
 
-#DOing the same thing with conditional predictions of gjam
+#####Doing the same thing with conditional predictions of gjam
 
-#replicate dr_gj: We want to store both conditional prediction in one data frame (so we run gjamPredict
-#only once and obtain both conditional predictions
+#replicate dr_gj: We want to store both conditional prediction (the one where Anopheles is 
+#absent and the one where it is present) in one data frame (so that we run gjamPredict
+#only once and obtain both conditional predictions)
 dr_gj_con <- rbind(dr_gj, dr_gj)
 
 
@@ -340,13 +345,13 @@ dr_gj_con$Mes <- NULL
 #variation in the covariate) >> we will delete this row after making the 
 #predictions
 dr_gj_con <- rbind(dr_gj_con,1)
-#create the PA-values for the Anopheles, the species we condition on (we create an addional one 
-#so that it has the same length as dr_gj_con)
+#create the PA-values for the Anopheles, the species we condition on (we create an additional
+#one so that it has the same length as dr_gj_con)
 ydata <- tibble(c(rep(0, 300), rep(1, 301)))
 names(ydata) <- "Anatropre"
 
 
-#define the modelling settings for posterior simulations with the conditional species as present
+#define the modelling settings for posterior simulations with the conditional species as ydataCond
 newdata <- list(xdata = dr_gj_con, ydataCond = ydata, nsim = 4000)
 
 #calculating the in-sample predictions (simulations)
@@ -356,36 +361,40 @@ sim <- gjamPredict(output = joint_fin, newdata = newdata)
 #ychains
 pred_gj_con <- sim$sdList$yMu[1:600,1] 
 
-#adding the conditional presence of Anotrophes to our data storage data frame
+#adding the conditional presence of Anopheles to our data storage data frame
 dr_gj_con$cond <- factor(ydata$Anatropre, labels = c("absent", "present"))
 #deleting the last row of our data (remember: we added only bc this way the predict function runs)
 dr_gj_con <- dr_gj_con[-601,]
 #readding the Mes column
 dr_gj_con$Mes <- ggd$Mes
 
+#combining covariates and conditional predictions
 dr_gj_con <- cbind(dr_gj_con, pred_gj_con)
-response_cp_gj_con <- ggplot(data = dr_gj_con, aes(x = IA500, y = pred_gj_con, color = Mes, shape = cond)) +
+#The plot:"Response Curve of Inundation Area for Culex perexiguus in GJAM Conditional on Presence of Anophles troparvus"
+ggplot(data = dr_gj_con, aes(x = IA500, y = pred_gj_con, color = Mes, shape = cond)) +
   geom_point() + ylab("Predicted Probability") + xlab("IA_500 in Standard Units") +
   ggtitle ("Response Curve of Inundation Area for Culex perexiguus in GJAM \n Conditional on Presence of Anophles troparvus") +
   guides(color=guide_legend(title="Month"), shape = guide_legend(title = "Anopheles troparvus"))
 
 #strange results, ordering of the effect of month on pred, changes depending on whether AT is present
-#or not. Does that make sense? Is that even possible? >> I actually do not think so (BUt only september
+#or not. Does that make sense? Is that even possible? >> I actually do not think so (But only september
 #is different!)
 
-###Doing a plot of gjam conditional predictions and univariate prediction (We just take any month)
+####Doing a plot of gjam conditional predictions and univariate prediction per month
 
-#taking June
-
-
+#make a list of plots with one plot for every month. Each plot contains response three response
+#curves: (i) univariate model, (ii) conditional predictions with absent Anopheles and (iii)
+#conditional predictions with present Anopheles
 #Preparing the input data
 plots_uv_con <- vector(mode = "list", length = length(levels(xdata$Mes)))
 for( i in levels(xdata$Mes)){
   #index variable
   j <-match(i, levels(xdata$Mes))
+  #Number of observations
   nu <- nrow(xdata[xdata["Mes"] == i,])
+  #three-times the xdata in one data frame, so that every prediction type is represented
   d <- rbind(xdata[xdata["Mes"] == i,], xdata[xdata["Mes"] == i,], xdata[xdata["Mes"] == i,])
-  #creating one column that has the presence-absence of at for the gjam models and for the univariate
+  #creating one column that has the presence-absence of Anopheles for the gjam models and for the univariate
   #model the variable takes on another factor level (2)
   d$mode <- factor(c(rep(0, nu), rep(1, nu), rep(2, nu)), labels = c("GJAM with absent Anopheles", 
                                                                      "GJAM with present Anopheles",
@@ -400,17 +409,18 @@ for( i in levels(xdata$Mes)){
     theme(legend.title = element_blank())
   plots_uv_con[[j]] <- plot
 }
-plots_uv_con[[2]]
+#Plot for Junio
+plots_uv_con[[3]]
 
-###################################################
-#for NDVIBEF#
 
+########for NDVIBEF
+
+####for univariate predictions
 #a sequence of NDVIBEF-values from min to max with 50 steps
 nd <- seq(min(df$NDVIBEF_2000), max(df$NDVIBEF_2000), length.out = 50)
-#names of covariates
-nc <- c("IA_500", "NDVIBEF_2000", "Mes")
+
 #the mean of the covariates is 0, bc I normalized them
-#creating  x-data dataframe with all the avareges (which are zero)
+#creating  x-data dataframe with all the averages (which are zero)
 data <- as.data.frame(matrix(0, ncol = length(nc), nrow = length(nd)))
 names(data) <- nc  
 #replace NDVIBEF_2000 0s with the sequence from above
@@ -430,22 +440,22 @@ for (i in levels(df$Mes)){
 #Converting Mes to a factor variable
 xdata$Mes <- factor(xdata$Mes, levels =c("Abril", "Mayo", "Junio", "Julio", "Agosto",
                                          "Septiembre"))
-#Run the posterior simulations with xdata, we want the predictions on the "probability scale"
-#That's why we use posterior_linpred with transform = T
-d_res <- posterior_linpred(fit_fin_cp, transform = T, newdata = xdata, seed = 333)
+#Run the posterior simulations with xdata
+d_res <- posterior_predict(fit_fin_cp, newdata = xdata, seed = 333)
 #getting the predictions on the "probability scale, by taking the mean per 
 #observation/column
 univariate <- colMeans(d_res)
-#adding these predictions to data frame
+#adding these predictions to the data frame
 ggd <- cbind(xdata, univariate)
-#maiking the plot
-response_cp_uv <- ggplot(data = ggd, aes(x = NDVIBEF_2000, y = univariate, color = Mes)) +
+#maiking the plot: "Response Curve of NDVI Before for Culex perexiguus in Univariate Model"
+ggplot(data = ggd, aes(x = NDVIBEF_2000, y = univariate, color = Mes)) +
   geom_point() + ylab("Predicted Probability") + xlab("NDVIBEF_2000 in Standard Units") +
   ggtitle ("Response Curve of NDVI Before for Culex perexiguus in Univariate Model") +
   guides(color=guide_legend(title="Month"))
 
 #Interesting overall shape >> kinda contradicts the niche concept >> we have maxima at the edges
-##Doing the same thing for gjam
+
+####Doing the same thing for gjam
 
 #for unconditional predictions
 #Converting the Mes-Variable to a bunch of dummies as demanded by gjam and storing whole data in
@@ -477,35 +487,39 @@ dr_gj <- dr_gj[-nrow(dr_gj),]
 dr_gj$Mes <- ggd$Mes
 #making the ggplot dataframe
 ggd_gj_un <- cbind(dr_gj, pred_gj_un)
-response_cp_un <- ggplot(data = ggd_gj_un, aes(x = NDVIBEF2000, y = pred_gj_un, color = Mes)) +
+
+#Plot: "Response Curve of NDVI Before for Culex perexiguus in GJAM"
+ggplot(data = ggd_gj_un, aes(x = NDVIBEF2000, y = pred_gj_un, color = Mes)) +
   geom_point() + ylab("Predicted Probability") + xlab("NDVIBEF_2000 in Standard Units") +
   ggtitle ("Response Curve of NDVI Before for Culex perexiguus in GJAM") +
   guides(color=guide_legend(title="Month"))
 
 ##Plot gjam and rstanarm response curves in the same plot
 
-#prepare the dataframe to feed into ggplot (just add predictions of gjam to dataframe of rstanarm)
+#prepare the dataframe to feed into ggplot (just add multivariate predictions to dataframe of 
+#univariate predictions)
 
 ggd$multivariate <- ggd_gj_un$pred_gj_un
 
-#Do the ggplot 
+#Plot: "Univariate vs. Multivariate Response Curves of NDVI Before for Culex perexiguus"
 
-response_cp_uv_un <- ggplot(data = ggd, aes(x = NDVIBEF_2000, color = Mes)) +
+ggplot(data = ggd, aes(x = NDVIBEF_2000, color = Mes)) +
   geom_point(aes(y = univariate, shape = "univariate")) + 
   geom_point(aes(y = multivariate, shape = "multivariate")) + ylab("Predicted Probability") + 
   xlab("NDVIBEF_2000 in Standard Units") +
   ggtitle ("Univariate vs. Multivariate Response Curves of NDVI Before for Culex perexiguus") +
   guides(color=guide_legend(title="Month"), shape = guide_legend(title="Model"))
 
-#They have a whole different shape >> I dont't think they should behave differently, but apparently
-#they do o_o
+#They have a  different shape >> I dont't think they should behave differently, but apparently
+#they do.
 
 
 
-#DOing the same thing with conditional predictions of gjam
+####Doing the same thing with conditional predictions of gjam
 
-#replicate dr_gj: We want to store both conditional prediction in one data frame (so we run gjamPredict
-#only once and obtain both conditional predictions
+#replicate dr_gj: We want to store both conditional prediction (the ones with present Anophles
+#and the one with absent Anopheles) in one data frame (so we run gjamPredict
+#only once and obtain both conditional predictions)
 dr_gj_con <- rbind(dr_gj, dr_gj)
 
 
@@ -521,7 +535,7 @@ ydata <- tibble(c(rep(0, 300), rep(1, 301)))
 names(ydata) <- "Anatropre"
 
 
-#define the modelling settings for posterior simulations with the conditional species as present
+#define the modelling settings for posterior simulations
 newdata <- list(xdata = dr_gj_con, ydataCond = ydata, nsim = 4000)
 
 #calculating the in-sample predictions (simulations)
@@ -538,25 +552,31 @@ dr_gj_con <- dr_gj_con[-601,]
 #readding the Mes column
 dr_gj_con$Mes <- ggd$Mes
 
+#adding predictions to dataframe dr_gj_con (our xdata)
 dr_gj_con <- cbind(dr_gj_con, pred_gj_con)
-response_cp_gj_con <- ggplot(data = dr_gj_con, aes(x = NDVIBEF2000, y = pred_gj_con, color = Mes, shape = cond)) +
+ggplot(data = dr_gj_con, aes(x = NDVIBEF2000, y = pred_gj_con, color = Mes, shape = cond)) +
   geom_point() + ylab("Predicted Probability") + xlab("NDVIBEF_2000 in Standard Units") +
   ggtitle ("Response Curve of NDVI Before for Culex perexiguus in GJAM \n Conditional on Presence of Anophles troparvus") +
   guides(color=guide_legend(title="Month"), shape = guide_legend(title = "Anopheles troparvus"))
 
-#strange results, ordering of the effect of month on pred, changes depending on whether AT is present
-#or not. Does that make sense? Is that even possible? >> I actually do not think so (BUt only september
-#is different!)
+#strange results, ordering of the effect of month on pred, changes depending on whether
+#Anopheles is present or not. Does that make sense? Is that even possible? 
+#>> I actually do not think so (BUt only septemberis different!)
 
-###Doing a plot of gjam conditional predictions and univariate prediction (We just take any month)
+####Doing a plot of gjam conditional predictions and univariate prediction per month
 
+#make a list of plots with one plot for every month. Each plot contains response three response
+#curves: (i) univariate model, (ii) conditional predictions with absent Anopheles and (iii)
+#conditional predictions with present Anopheles
 
 #Preparing the input data
 plots_uv_con <- vector(mode = "list", length = length(levels(xdata$Mes)))
 for( i in levels(xdata$Mes)){
   #index variable
   j <-match(i, levels(xdata$Mes))
+  #number of observation per month
   nu <- nrow(xdata[xdata["Mes"] == i,])
+  #stacking covariates 3-times (for every prediction type)
   d <- rbind(xdata[xdata["Mes"] == i,], xdata[xdata["Mes"] == i,], xdata[xdata["Mes"] == i,])
   #creating one column that has the presence-absence of at for the gjam models and for the univariate
   #model the variable takes on another factor level (2)
@@ -574,6 +594,8 @@ for( i in levels(xdata$Mes)){
   plot
   plots_uv_con[[j]] <- plot
 }
+
+#Example: Septiembre
 plots_uv_con[[6]]
 
 #################################################################################################
@@ -583,16 +605,15 @@ plots_uv_con[[6]]
 
 #a sequence of IA_500-values from min to max with 50 steps
 ia <- seq(min(df$IA_500), max(df$IA_500), length.out = 50)
-#names of covariates
-nc <- c("IA_500", "NDVIBEF_2000", "Mes")
+
 #the mean of the covariates is 0, bc I normalized them
 #creating  x-data dataframe with all the avareges (which are zero)
 data <- as.data.frame(matrix(0, ncol = length(nc), nrow = length(ia)))
 names(data) <- nc  
 #replace IA_500 0s with the sequence from above
 data$IA_500 <-ia
-#Next, we want to create a dataframe with "data" for all the different months (bc we want to have
-#a response curve for every month separately)
+#Next, we want to create a dataframe with "data" for all the different months (because we want
+#to have a response curve for every month separately)
 #initialize empty data frame that will be filled in the loop over the months
 xdata <- as.data.frame(matrix(, ncol = length(nc), nrow = 0))
 names(xdata) <- nc  
@@ -603,25 +624,25 @@ for (i in levels(df$Mes)){
   d$Mes <- i
   xdata <- rbind(xdata, d)
 }
+
 #Converting Mes to a factor variable
 xdata$Mes <- factor(xdata$Mes, levels =c("Abril", "Mayo", "Junio", "Julio", "Agosto",
                                          "Septiembre"))
-#Run the posterior simulations with xdata, we want the predictions on the "probability scale"
-#That's why we use posterior_linpred with transform = T
-d_res <- posterior_linpred(fit_fin_at, transform = T, newdata = xdata, seed = 333)
+#Run the posterior simulations with xdata
+d_res <- posterior_predict(fit_fin_at, newdata = xdata, seed = 333)
 #getting the predictions on the "probability scale, by taking the mean per 
 #observation/column
 univariate <- colMeans(d_res)
 #adding these predictions to data frame
 ggd <- cbind(xdata, univariate)
-#maiking the plot
-response_at_uv <- ggplot(data = ggd, aes(x = IA_500, y = univariate, color = Mes)) +
+#maiking the plot "Response Curve of Inundation Area for Anopheles Troparvus in Univariate Model"
+ggplot(data = ggd, aes(x = IA_500, y = univariate, color = Mes)) +
   geom_point() + ylab("Predicted Probability") + xlab("IA_500 in Standard Units") +
   ggtitle ("Response Curve of Inundation Area for Anopheles Troparvus in Univariate Model") +
   guides(color=guide_legend(title="Month"))
 
-##Doing the same thing for gjam
-#for unconditional predictions
+####Doing the same thing for multivariate model
+####for unconditional predictions
 #Converting the Mes-Variable to a bunch of dummies as demanded by gjam
 dr_gj <- gjamDummy(xdata$Mes, xdata)
 #rename certain columns to coefficient names of joint_fin output
@@ -632,8 +653,7 @@ dr_gj$intercept <- rep(1 , nrow(xdata))
 dr_gj$"I(IA500^2)" <- (dr_gj$IA500)^2
 dr_gj$"I(NDVIBEF2000^2)" <- 0
 #add a superfluous line of 1s (gjamPredict doesnt run, if there is no
-#variation in the covariate) >> we will delete this row after making the 
-#predictions
+#variation in the covariate) >> we will delete this row after making the predictions
 dr_gj <- rbind(dr_gj,1)
 #delete Mes variable (also needed for gjamPredict to run)
 dr_gj$Mes <- NULL
@@ -650,20 +670,20 @@ dr_gj <- dr_gj[-nrow(dr_gj),]
 dr_gj$Mes <- ggd$Mes
 #making the ggplot dataframe
 ggd_gj_un <- cbind(dr_gj, pred_gj_un)
-response_at_un <- ggplot(data = ggd_gj_un, aes(x = IA500, y = pred_gj_un, color = Mes)) +
+#plot "Response Curve of Inundation Area for Anopheles Troparvus in GJAM"
+ggplot(data = ggd_gj_un, aes(x = IA500, y = pred_gj_un, color = Mes)) +
   geom_point() + ylab("Predicted Probability") + xlab("IA_500 in Standard Units") +
   ggtitle ("Response Curve of Inundation Area for Anopheles Troparvus in GJAM") +
   guides(color=guide_legend(title="Month"))
 
-##Plot gjam and rstanarm response curves in the same plot
+####Plot multi- and univariate response curves in the same plot
 
-#prepare the dataframe to feed into ggplot (just add predictions of gjam to dataframe of rstanarm)
-
+#prepare the dataframe to feed into ggplot (just add multivariate predictions to dataframe of 
+#univariate predictions)
 ggd$multivariate <- ggd_gj_un$pred_gj_un
 
-#Do the ggplot 
-
-response_at_uv_un <- ggplot(data = ggd, aes(x = IA_500, color = Mes)) +
+#Plot "Univariate vs. Multivariate Response Curves of Inundation Area for Anopheles Troparvus"
+ggplot(data = ggd, aes(x = IA_500, color = Mes)) +
   geom_point(aes(y = univariate, shape = "univariate")) + 
   geom_point(aes(y = multivariate, shape = "multivariate")) + ylab("Predicted Probability") + 
   xlab("IA_500 in Standard Units") +
@@ -671,30 +691,27 @@ response_at_uv_un <- ggplot(data = ggd, aes(x = IA_500, color = Mes)) +
   guides(color=guide_legend(title="Month"), shape = guide_legend(title="Model"))
 
 #Why are the response curves different? Does that contradict our hypothesis that unconditional
-#predictions dont differ from univariate predictions? Why do they cross? (heterogeneous effect (
-#of month depends on value of IA_500)) Why is for september multivariate probability more positive,
-#but for all the other months the univariate model
+#predictions dont differ from univariate predictions? Why do they cross? 
 
-#DOing the same thing with conditional predictions of gjam
+####Doing the same thing with conditional predictions of multivariate model
 
-#replicate dr_gj: We want to store both conditional prediction in one data frame (so we run gjamPredict
-#only once and obtain both conditional predictions
+#replicate dr_gj: We want to store both conditional predictions (the one with present Culex
+#and the one with absent Culex) in one data frame
 dr_gj_con <- rbind(dr_gj, dr_gj)
 
 
 #delete Mes variable (also needed for gjamPredict to run)
 dr_gj_con$Mes <- NULL
 #add a superfluous line of 1s (gjamPredict doesnt run, if there is no
-#variation in the covariate) >> we will delete this row after making the 
-#predictions
+#variation in the covariate) >> we will delete this row after making the predictions
 dr_gj_con <- rbind(dr_gj_con,1)
-#create the PA-values for the Culex, the species we condition on (we create an addional one 
+#create the PA-values for  Culex, the species we condition on (we create an addional one 
 #so that it has the same length as dr_gj_con)
 ydata <- tibble(c(rep(0, 300), rep(1, 301)))
 names(ydata) <- "Cxperpre"
 
 
-#define the modelling settings for posterior simulations with the conditional species as present
+#define the modelling settings for posterior simulations 
 newdata <- list(xdata = dr_gj_con, ydataCond = ydata, nsim = 4000)
 
 #calculating the in-sample predictions (simulations)
@@ -704,32 +721,40 @@ sim <- gjamPredict(output = joint_fin, newdata = newdata)
 #ychains
 pred_gj_con <- sim$sdList$yMu[1:600,2] 
 
-#adding the conditional presence of Anotrophes to our data storage data frame
+#adding the PA of Culex to our data storage data frame
 dr_gj_con$cond <- factor(ydata$Cxperpre, labels = c("absent", "present"))
-#deleting the last row of our data (remember: we added only bc this way the predict function runs)
+#deleting the last row of our data (remember: we added only bc this way the predict function 
+#runs)
 dr_gj_con <- dr_gj_con[-601,]
 #readding the Mes column
 dr_gj_con$Mes <- ggd$Mes
 
+#making data frame for ggplot
 dr_gj_con <- cbind(dr_gj_con, pred_gj_con)
-response_at_gj_con <- ggplot(data = dr_gj_con, aes(x = IA500, y = pred_gj_con, color = Mes, shape = cond)) +
+#Plotting "Response Curve of Inundation Area for Anopheles Troparvus in GJAM Conditional on Presence of Anophles troparvus"
+ggplot(data = dr_gj_con, aes(x = IA500, y = pred_gj_con, color = Mes, shape = cond)) +
   geom_point() + ylab("Predicted Probability") + xlab("IA_500 in Standard Units") +
   ggtitle ("Response Curve of Inundation Area for Anopheles Troparvus in GJAM \n Conditional on Presence of Anophles troparvus") +
-  guides(color=guide_legend(title="Month"), shape = guide_legend(title = "Culex perexigus"))
+  guides(color=guide_legend(title="Month"), shape = guide_legend(title = "Culex perexiguus"))
 
 #looks pretty consistent (response is larger, if Culex is present)
 
-###Doing a plot of gjam conditional predictions and univariate prediction (We do month by month)
+####Doing a plot of gjam conditional predictions and univariate prediction (We do month by month)
 
+#make a list of plots with one plot for every month. Each plot contains response three response
+#curves: (i) univariate model, (ii) conditional predictions with absent Culex and (iii)
+#conditional predictions with present Culex
 #Preparing the input data
 plots_uv_con <- vector(mode = "list", length = length(levels(xdata$Mes)))
 for( i in levels(xdata$Mes)){
   #index variable
   j <-match(i, levels(xdata$Mes))
+  #number of observations per month
   nu <- nrow(xdata[xdata["Mes"] == i,])
+  #appending the covariates
   d <- rbind(xdata[xdata["Mes"] == i,], xdata[xdata["Mes"] == i,], xdata[xdata["Mes"] == i,])
-  #creating one column that has the presence-absence of at for the gjam models and for the univariate
-  #model the variable takes on another factor level (2)
+  #creating one column that has the PA of Culex for the multivariate models and for the 
+  #univariate model the variable takes on another factor level (2)
   d$mode <- factor(c(rep(0, nu), rep(1, nu), rep(2, nu)), labels = c("GJAM with absent Culex", 
                                                                      "GJAM with present Culex",
                                                                      "Univariate Model"))
@@ -739,19 +764,21 @@ for( i in levels(xdata$Mes)){
   #Doing the ggplot
   plot <- ggplot(data = d, aes(x = IA_500, y = pred, shape = mode)) +
     geom_point() + ylab("Predicted Probability") + xlab("IA_500 in Standard Units") +
-    ggtitle (paste0("Response Curve of Inundation Area for Anopheles Troparvus in GJAM \n Conditional on Presence of Culex perexigus vs. Univariate Model for Month ", i)) +
+    ggtitle (paste0("Response Curve of Inundation Area for Anopheles Troparvus in GJAM \n Conditional on Presence of Culex perexiguus vs. Univariate Model for Month ", i)) +
     theme(legend.title = element_blank())
   plots_uv_con[[j]] <- plot
 }
-plots_uv_con[[6]]
 
+#Example: July
+plots_uv_con[[4]]
+#Why do the curves have different forms?
 ################################################
-#for NDVIBEF#
+####for NDVIBEF
 
+###For the univariate model
 #a sequence of NDVIBEF-values from min to max with 50 steps
 nd <- seq(min(df$NDVIBEF_2000), max(df$NDVIBEF_2000), length.out = 50)
 #names of covariates
-nc <- c("IA_500", "NDVIBEF_2000", "Mes")
 #the mean of the covariates is 0, bc I normalized them
 #creating  x-data dataframe with all the avareges (which are zero)
 data <- as.data.frame(matrix(0, ncol = length(nc), nrow = length(nd)))
@@ -773,24 +800,24 @@ for (i in levels(df$Mes)){
 #Converting Mes to a factor variable
 xdata$Mes <- factor(xdata$Mes, levels =c("Abril", "Mayo", "Junio", "Julio", "Agosto",
                                          "Septiembre"))
-#Run the posterior simulations with xdata, we want the predictions on the "probability scale"
-#That's why we use posterior_linpred with transform = T
-d_res <- posterior_linpred(fit_fin_at, transform = T, newdata = xdata, seed = 333)
+#Run the posterior simulations with xdata
+d_res <- posterior_predict(fit_fin_at, newdata = xdata, seed = 333)
 #getting the predictions on the "probability scale, by taking the mean per 
 #observation/column
 univariate <- colMeans(d_res)
 #adding these predictions to data frame
 ggd <- cbind(xdata, univariate)
-#maiking the plot
-response_at_uv <- ggplot(data = ggd, aes(x = NDVIBEF_2000, y = univariate, color = Mes)) +
+#making the plot "Response Curve of NDVI Before for Anopheles Troparvus in Univariate Model"
+ggplot(data = ggd, aes(x = NDVIBEF_2000, y = univariate, color = Mes)) +
   geom_point() + ylab("Predicted Probability") + xlab("NDVIBEF_2000 in Standard Units") +
   ggtitle ("Response Curve of NDVI Before for Anopheles Troparvus in Univariate Model") +
   guides(color=guide_legend(title="Month"))
 
 #Interesting overall shape >> kinda contradicts the niche concept >> we have maxima at the edges
-##Doing the same thing for gjam
 
-#for unconditional predictions
+####Doing the same thing for multivariate model
+####for unconditional predictions
+
 #Converting the Mes-Variable to a bunch of dummies as demanded by gjam and storing whole data in
 #dr_gj
 dr_gj <- gjamDummy(xdata$Mes, xdata)
@@ -812,28 +839,28 @@ newdata <- list(xdata = dr_gj, nsim = 4000)
 #calculating the in-sample predictions (simulations)
 sim <- gjamPredict(output = joint_fin, newdata = newdata)
 
-#take the first 300 rows as predictions (deleting the last row); Predictions are the means of the
-#ychains
+#take the first 300 rows as predictions (deleting the last row) of second row (corresponding to
+#Anopheles); Predictions are the means of the ychains
 pred_gj_un <- sim$sdList$yMu[1:300,2] 
 dr_gj <- dr_gj[-nrow(dr_gj),]
 #readding the Mes column
 dr_gj$Mes <- ggd$Mes
 #making the ggplot dataframe
 ggd_gj_un <- cbind(dr_gj, pred_gj_un)
-response_at_un <- ggplot(data = ggd_gj_un, aes(x = NDVIBEF2000, y = pred_gj_un, color = Mes)) +
+#Plot "Response Curve of NDVI Before for Anopheles Troparvus in GJAM"
+ggplot(data = ggd_gj_un, aes(x = NDVIBEF2000, y = pred_gj_un, color = Mes)) +
   geom_point() + ylab("Predicted Probability") + xlab("NDVIBEF_2000 in Standard Units") +
   ggtitle ("Response Curve of NDVI Before for Anopheles Troparvus in GJAM") +
   guides(color=guide_legend(title="Month"))
 
-##Plot gjam and rstanarm response curves in the same plot
+####Plot multi- and univariate response curves in the same plot
 
-#prepare the dataframe to feed into ggplot (just add predictions of gjam to dataframe of rstanarm)
-
+#prepare the dataframe to feed into ggplot (just add predictions of multivariate model
+#to dataframe of univariate predictions)
 ggd$multivariate <- ggd_gj_un$pred_gj_un
 
-#Do the ggplot 
-
-response_at_uv_un <- ggplot(data = ggd, aes(x = NDVIBEF_2000, color = Mes)) +
+#Plot "Univariate vs. Unconditional Multivariate Response Curves of NDVI Before for Anopheles Troparvus" 
+ggplot(data = ggd, aes(x = NDVIBEF_2000, color = Mes)) +
   geom_point(aes(y = univariate, shape = "univariate")) + 
   geom_point(aes(y = multivariate, shape = "multivariate")) + ylab("Predicted Probability") + 
   xlab("NDVIBEF_2000 in Standard Units") +
@@ -841,37 +868,31 @@ response_at_uv_un <- ggplot(data = ggd, aes(x = NDVIBEF_2000, color = Mes)) +
   guides(color=guide_legend(title="Month"), shape = guide_legend(title="Model"))
 
 #They have a whole different shape >> I dont't think they should behave differently, but apparently
-#they do o_o
+#they do.
 
+#Doing the same thing with conditional predictions of gjam
 
-
-#DOing the same thing with conditional predictions of gjam
-
-#replicate dr_gj: We want to store both conditional prediction in one data frame (so we run gjamPredict
-#only once and obtain both conditional predictions
+#replicate dr_gj: We want to store both conditional predictions (the ones with present Culex and 
+#the one with absent Culex) in one data frame 
 dr_gj_con <- rbind(dr_gj, dr_gj)
-
-
 #delete Mes variable (also needed for gjamPredict to run)
 dr_gj_con$Mes <- NULL
 #add a superfluous line of 1s (gjamPredict doesnt run, if there is no
-#variation in the covariate) >> we will delete this row after making the 
-#predictions
+#variation in the covariate) >> we will delete this row after making the predictions
 dr_gj_con <- rbind(dr_gj_con,1)
-#create the PA-values for the Anopheles, the species we condition on (we create an addional one 
+#create the PA-values for Culex, the species we condition on (we create an addional row 
 #so that it has the same length as dr_gj_con)
 ydata <- tibble(c(rep(0, 300), rep(1, 301)))
 names(ydata) <- "Cxperpre"
 
-
-#define the modelling settings for posterior simulations with the conditional species as present
+#define the modelling settings for posterior simulations with conditional species
 newdata <- list(xdata = dr_gj_con, ydataCond = ydata, nsim = 4000)
 
 #calculating the in-sample predictions (simulations)
 sim <- gjamPredict(output = joint_fin, newdata = newdata)
 
-#take the first 600 rows as predictions (deleting the last row); Predictions are the means of the
-#ychains
+#take the first 600 rows as predictions (deleting the last row); Predictions are the means of 
+#the ychains
 pred_gj_con <- sim$sdList$yMu[1:600,2] 
 
 #adding the conditional presence of Culex to our data storage data frame
@@ -881,26 +902,32 @@ dr_gj_con <- dr_gj_con[-601,]
 #readding the Mes column
 dr_gj_con$Mes <- ggd$Mes
 
+#creating ggplot dataframe
 dr_gj_con <- cbind(dr_gj_con, pred_gj_con)
-response_at_gj_con <- ggplot(data = dr_gj_con, aes(x = NDVIBEF2000, y = pred_gj_con, color = Mes, shape = cond)) +
+
+#Plot "Response Curve of NDVI Before for Anopheles Troparvus in GJAM Conditional on Presence of Anophles troparvus"
+ggplot(data = dr_gj_con, aes(x = NDVIBEF2000, y = pred_gj_con, color = Mes, shape = cond)) +
   geom_point() + ylab("Predicted Probability") + xlab("NDVIBEF_2000 in Standard Units") +
   ggtitle ("Response Curve of NDVI Before for Anopheles Troparvus in GJAM \n Conditional on Presence of Anophles troparvus") +
   guides(color=guide_legend(title="Month"), shape = guide_legend(title = "Anopheles troparvus"))
 
-#Interesting to note: Effect of conditional species is different depending on the month (But I 
-#think that makes sense)
+#makes sense to me 
 
-###Doing a plot of gjam conditional predictions and univariate prediction (We just take any month)
+####Doing a plot of multivariate conditional predictions and univariate predictions (We do month by month)
 
+#make a list of plots with one plot for every month. Each plot contains response three response
+#curves: (i) univariate model, (ii) conditional predictions with absent Culex and (iii)
+#conditional predictions with present Culex
 
 #Preparing the input data
 plots_uv_con <- vector(mode = "list", length = length(levels(xdata$Mes)))
 for( i in levels(xdata$Mes)){
   #index variable
   j <-match(i, levels(xdata$Mes))
+  #number of observations per month
   nu <- nrow(xdata[xdata["Mes"] == i,])
   d <- rbind(xdata[xdata["Mes"] == i,], xdata[xdata["Mes"] == i,], xdata[xdata["Mes"] == i,])
-  #creating one column that has the presence-absence of at for the gjam models and for the univariate
+  #creating one column that has the presence-absence of Culex for the gjam models and for the univariate
   #model the variable takes on another factor level (2)
   d$mode <- factor(c(rep(0, nu), rep(1, nu), rep(2, nu)), labels = c("GJAM with absent Culex", 
                                                                      "GJAM with present Culex",
@@ -916,12 +943,13 @@ for( i in levels(xdata$Mes)){
   plot
   plots_uv_con[[j]] <- plot
 }
-plots_uv_con[[1]]
-#same pattern every month
 
+#Example: April
+plots_uv_con[[1]]
+##############################################################################################
 #############################6.1d Variable Importance with DALEX################################
-###################################### For Culex perexiguus
-##################for univariate model
+####For Culex perexiguus
+####for univariate model
 
 #Define our covariates as xdata
 xdata <- train[,c("Mes", "IA_500", "NDVIBEF_2000")]
@@ -932,11 +960,10 @@ pred_uv <- function(model, newdata)  {
   return(posterior_predict(model, newdata) %>% apply(2, mean))
 }
 
-#create the explain object (core object of DALEX) which contains the data and
+#create the explain object (core object of DALEX) which contains the model, the data and
 #the predict function
 dal_cp <- explain(fit_fin_cp, xdata, y = train$Cxperpre, predict_function = pred_uv,
                   type = "classification", label = "Univariate Probit")
-
 
 # calculate the permutation-based variable importance measure (Here: the difference in
 #(1-AUC) between original data and permuted data per covariate)
@@ -951,13 +978,13 @@ plot(vi_cp) +
 #our response, the resulting AUC is roughly .11 worse than for the 
 #predictions without the permutations. 
 
-
-##################For gjam unconditional predictions
+####For multivariate unconditional predictions
 
 # create custom predict function, this is a little trickier, because we need
 #to feed it xdata with the three columns (Mes, IA_500 and NDVIBEF) (bc we 
-#want to get the variable importance of these three variables), but for
-#gjamPredict we need to modify the data so that the function works.
+#want to get the variable importance of these three variables), but we cannot use gjamPredict
+#with only these three xdata columns >> We need to manipulate the data first, before applying
+#gjamPredict. We do this in our custumory gjam-predict function:
 pred_gj <- function(model, newdata)  {
   #prepare data for prediction
   #convert the factor mes to dummies
@@ -988,19 +1015,19 @@ plot(vi_cpgj) + labs(title = "Variable Importance over 50 Permutations", subtitl
 #Most important variable is IA_500, then Mes and then NDVIBEF_2000. This is slightly different than
 #for the univariate case, but is the difference significant?
 
-################## Conditional multivariate predictions
 
-#plotting the two: 
-#adding the other prediction types
+####plotting the two: 
+#making a tibble with (i) a variable column indicating which variable is permuted, (ii) a loss column giving the 
+#(1-Auc)-losses and (iii) a type column indicating the model type
 d_gg <- tibble(var = c(vi_cp$variable, vi_cpgj$variable), loss = c(vi_cp$dropout_loss, vi_cpgj$dropout_loss), type = c(vi_cp$label, vi_cpgj$label))
 #converting var and type to a factor
 d_gg$var <- factor(d_gg$var, levels = c("NDVIBEF_2000", "IA_500", "Mes", "_baseline_", "_full_model_"))
 d_gg$type <- factor(d_gg$type, levels = c("Univariate Probit", "Unconditional Multivariate Probit"))
 
-#deleting baseline and full model 
+#deleting baseline and full model (We do not need these loss values)
 d_gg <-d_gg[!(d_gg$var == "_full_model_" | d_gg$var == "_baseline_"),]
 
-
+#Plot "Variable Importance Boxplots"
 ggplot(d_gg, aes(x = loss, y = var)) +
   geom_boxplot(aes(color = type)) + # Boxplot shows Boxes: 25% and 75 % Quantile; vertical line: median; lower whisker = smallest observation greater than or equal to lower hinge - 1.5 * IQR
   facet_wrap(~type, nrow =3) +
@@ -1010,10 +1037,7 @@ ggplot(d_gg, aes(x = loss, y = var)) +
   # Suppress the legend since color isn't actually providing any information
   theme(legend.position = "none") 
 
-
-#################################### Conditional multivariate predictions
-
-
+#### Conditional multivariate predictions
 
 #xdata with PA of Anopheles. This way, we treat the PA-data like a variable for which we can
 #calculate VI
@@ -1028,7 +1052,7 @@ pred_con <- function(model, newdata){
   #add quadratic terms
   newdata$"I(IA500^2)" <- (newdata$IA_500)^2
   newdata$"I(NDVIBEF2000^2)" <- (newdata$NDVIBEF_2000)^2
-  #make a newdata list for gjam
+  #make a newdata list for gjam with ydataCond for the condtitioning species
   newdata <- list(xdata = newdata, ydataCond = newdata[,match("Anatropre", names(newdata))], nsim = 4000)
   #Doing the predictions
   pre <- gjamPredict(output = model, newdata = newdata)
@@ -1042,21 +1066,20 @@ dal_cp_con <- explain(joint_fin, xdata_con, y = train$Cxperpre,
 
 #permutation-based variable importance measure
 set.seed(1980)
-#DOing it for 10 permutations
-vi_cp_con <- model_parts(dal_cp_con, type = "difference", B = 50)
+#Doing it for 50 permutations
+vi_cp_con <- model_parts(dal_cp_con, type = "difference", B = 5)
 
 #plotting the results
 plot(vi_cp_con) + labs(title = "Variable Importance", subtitle = "created for the multivariate probit model of Culex perexiguus conditional on Anopheles troparvus")
-#Anatrope label muss noch geändert werden
+
 #Anopheles is the most important variable, followed by IA_500 and Mes. So, the environmental 
 #covariates have the same order as in the unconditional case. But their magnitude is way smaller.
 #The reason is that the PA-data takes away some of the predictive power of the environmental 
 #covariates.
 
-
-###########################################################################
-######################################For Anopheles
-################## For Univariate Probit Model
+##############################################################################################
+####For Anopheles
+###For Univariate Probit Model
 #make the explainer
 dal_at <- explain(fit_fin_at, xdata, y = train$Anatropre, predict_function = pred_uv,
                   type = "classification", label = "Univariate Probit")
@@ -1073,7 +1096,7 @@ plot(vi_at) +
 #our response, the resulting AUC is roughly .2 worse than for the 
 #predictions without the permutations. 
 
-##################For unconditional predictions in gjam
+####For unconditional predictions in gjam
 
 #We need to slightly change our predict function (just the last line) compared to the Culex case
 pred_gjat <- function(model, newdata)  {
@@ -1088,9 +1111,10 @@ pred_gjat <- function(model, newdata)  {
   newdata <- list(xdata = newdata, nsim = 4000)
   #Doing the predictions
   pre <- gjamPredict(output = model, newdata = newdata)
-  #return the mean of the y-chains for every observation, this time of at
+  #return the mean of the y-chains for every observation, this time of at (column 2)
   return(pre$sdList$yMu[,2])
 }
+
 #make the explainer
 dal_atgj <- explain(joint_fin, xdata, y = train$Anatropre,
                     predict_function = pred_gjat, type = "classification", 
@@ -1106,7 +1130,7 @@ plot(vi_atgj) + labs(title = "Variable Importance over 50 Permutations", subtitl
 #Most important variable is Mes, then NDVI_BEF and then IA, similar results as for the univariate
 #model
 
-#Plotting VI of both models in one plot
+###Plotting VI of both models in one plot
 
 # making a dataframe with all the important data: 1. The variable which is permuted, 2. the drop 
 #out loss for every run and 3. the according model type labels
@@ -1121,7 +1145,7 @@ d_ggat$type <- factor(d_ggat$type, levels = c("Univariate Probit", "Unconditiona
 #deleting baseline and full model 
 d_ggat <-d_ggat[!(d_ggat$var == "_full_model_" | d_ggat$var == "_baseline_"),]
 
-
+#Plot the comparison
 ggplot(d_ggat, aes(x = loss, y = var)) +
   geom_boxplot(aes(color = type)) + # Boxplot shows Boxes: 25% and 75 % Quantile; vertical line: median; lower whisker = smallest observation greater than or equal to lower hinge - 1.5 * IQR
   facet_wrap(~type, nrow =3) +
@@ -1147,7 +1171,7 @@ pred_atcon <- function(model, newdata)  {
   #add quadratic terms
   newdata$"I(IA500^2)" <- (newdata$IA_500)^2
   newdata$"I(NDVIBEF2000^2)" <- (newdata$NDVIBEF_2000)^2
-  #make a newdata list for gjam
+  #make a newdata list for gjam with ydataCond
   newdata <- list(xdata = newdata, ydataCond = newdata[,match("Cxperpre", names(newdata))], nsim = 4000)
   #Doing the predictions
   pre <- gjamPredict(output = model, newdata = newdata)
@@ -1161,13 +1185,12 @@ dal_at_con <- explain(joint_fin, xdata_con, y = train$Anatropre,
 
 #permutation-based variable importance measure
 set.seed(1980)
-#DOing it for 10 permutations
+#Doing it for 50 permutations
 vi_at_con <- model_parts(dal_at_con, type = "difference", B = 50)
 
 #plotting the results
 plot(vi_at_con) + labs(title = "Variable Importance", subtitle = "created for the multivariate probit model of Anopheles troparvus conditional on Culex perexiguus")
-#Anatrope label muss noch geändert werden
-#Culex isnt that important o_o; is that in accordance with the AUCs? AUC is just a little over .01
+#Culex isnt that important; is that in accordance with the AUCs? AUC is just a little over .01
 #better for conditional model >> So, I guess so!
 #Mes variable does not lose much of its importance measured in dif. The other two variables lose 
 #considerably.
@@ -1175,9 +1198,10 @@ plot(vi_at_con) + labs(title = "Variable Importance", subtitle = "created for th
 ##############################################################################################
 ##################################################6.2. Out-of-Sample##########################
 ###############a. Conditional Predictions of gjam vs. Unconditional Predictions of############
-#gjam vs. predictions of univariate model
+###############gjam vs. predictions of univariate model#######################################
 
-#We evaluate predictive performance on our test set with the AUC
+#We evaluate predictive performance on our test set with the AUC.
+
 #####For Culex perexiguus
 #We make the three predictions ((i) univariate, (ii) unconditional multivariate and (iii)
 #conditional multivariate)
@@ -1185,7 +1209,7 @@ plot(vi_at_con) + labs(title = "Variable Importance", subtitle = "created for th
 ###(i) univariate predictions on the observation scale
 pred_cp_uv <- posterior_predict(fit_fin_cp, newdata = test, seed = 333)
 #take the average of these draws per observation as an estimation of the 
-# "expected" predicted y-value/predicted probability of occurence
+# "expected" predicted y-value/predicted probability of occurence (prediction scale)
 pred_cp_uv <- colMeans((pred_cp_uv))
 #AUC
 auc_cp_uv <- auc(response = test$Cxperpre, predictor = pred_cp_uv)
@@ -1218,15 +1242,16 @@ auc_cp_mvun
 ###Plot the univariate conditions against the unconditional multivariate ones
 d_gg_uc_cp <- data.frame(cbind(pred_cp_uv, p_cp_gj_un, y_test$Cxperpre))
 names(d_gg_uc_cp) <- c("cp_uv", "cp_mv_un", "cp")
-#make a factor out cp. This comes in handy for the plotting
+#make a factor out of cp. This comes in handy for the plotting
 d_gg_uc_cp$cp <- factor(d_gg_uc_cp$cp, levels = c(0, 1), labels = c("absent", "present"))
 
-uvvsmvun_cp <- ggplot(d_gg_uc_cp, aes(x=cp_uv, y=cp_mv_un, shape=factor(cp))) + geom_point() +
+#Plot "Univariate vs. Unconditional Multivariate Predictions for Culex perexiguus"
+ggplot(d_gg_uc_cp, aes(x=cp_uv, y=cp_mv_un, shape=factor(cp))) + geom_point() +
   ggtitle("Univariate vs. Unconditional Multivariate Predictions for Culex perexiguus") +
   xlab("Predictions from Univariate Probit ") + 
   ylab("Unconditional Predictions from Multivariate Probit") +
   labs(shape = "Observed PA of Culex perexiguus") + ylim(0, 1)
-uvvsmvun_cp
+
 #They look as if they are centered around the identity line >> the predictions are more or less 
 #the same! There is a slight tendency, though: For low predictions multivariate predictions are
 #higher than univariate, but for high predictions univariate predictions are higher than 
@@ -1235,7 +1260,6 @@ uvvsmvun_cp
 ###Conditional predictions
 #Culex perexiguus conditioned on Anopheles troparvus
 #storing input data in newdata, inclduing the PA of Anopheles
-set.seed(333)
 newdata <- list(xdata = test_gj, ydataCond = y_test[,2], nsim = 4000) # conditionally predict out-of-sample
 #Doing the actual prediction
 pred_cp_mvco      <- gjamPredict(output = joint_fin, newdata = newdata)
@@ -1247,34 +1271,31 @@ auc_cp_mvco
 #AUC roughly .81 >> So, there is a considerable improvement of .05 in AUC >> corroborates
 #our hypothesis that PA data enhances predictions :)
 
-#Plotting Univariate Predictions vs. Conditional Multivariate Predictions
+###Plotting Univariate Predictions vs. Conditional Multivariate Predictions
 d_gg_cp <- data.frame(cbind(pred_cp_uv, p_cp_mvco, pred_cp_mvco$prPresent[,2], y_test$Cxperpre))
 names(d_gg_cp) <- c("cp_uv", "cp_mv", "at", "cp")
 #Make the PA-variables to factors
 d_gg_cp$cp <- factor(d_gg_cp$cp, levels = c(0, 1), labels = c("absent", "present"))
 d_gg_cp$at <- factor(d_gg_cp$at, levels = c(0, 1), labels = c("absent", "present"))
 
-provsgj_cp <- ggplot(d_gg_cp, aes(x=cp_uv, y=cp_mv, color=at, shape = cp)) + geom_point() +
+ggplot(d_gg_cp, aes(x=cp_uv, y=cp_mv, color=at, shape = cp)) + geom_point() +
   ggtitle("Univariate vs. Conditional Multivariate Predictions for Culex perexiguus") +
   xlab("Predictions from Univariate Probit ") + ylab("Conditional Predictions from Multivariate Probit") +
   labs( color = "PA of Anopheles troparvus", shape = "PA of Culex perexiguus") + ylim(0,1)
-provsgj_cp
+
 #You can see that there is a positive linear relationship between the predictions
 #of the two models grouped by the PA of Anopheles troparvus (the species we conditioned on).
-#This indicates
-#that both models roughly do the same/environmental signals are treated similarily.
-#The slopes of the two lines are not equal to 1 (Would we expect this? I think, we do, if we 
-#assume that the environmental coefficients are the same PUH, I still dont know the answer
-#to this question). You can see that the conditioning on 
-#Anapheles troparvus has a clear effect (The blue and red points form two distinct groups)
-#on the multivariate predictions compared to the univariate predictions. The multivariate model
-#predicts a roughly 12.5 % points
-#higher probability of occurence for plots where Anopheles troparvus is present compared to
-#plots where it's absent.
+#This indicates that both models roughly do the same/environmental signals are treated 
+#similarily. The slopes of the two lines are not equal to 1 (Would we expect this? I think,
+#we do, if we assume that the environmental coefficients are the same PUH, I still dont know
+#the answerto this question). You can see that the conditioning on Anopheles troparvus has a 
+#clear effect (The blue and red points form two distinct groups) on the multivariate 
+#predictions compared to the univariate predictions. The multivariate model predicts a roughly
+#12.5 % points higher probability of occurence for plots where Anopheles troparvus is present 
+#compared to plots where it's absent.
 
-
-
-#####for Anopheles troparvus
+##############################################################################################
+####for Anopheles troparvus
 #We evaluate predictive performance on our test set with the AUC
 #We make the three predictions ((i) univariate, (ii) unconditional multivariate and (iii)
 #conditional multivariate)
@@ -1303,25 +1324,25 @@ auc_at_mvun
 #AUC roughly .84 >> roughly the same as the univariate model >> corroborates our hypothesis
 
 ###Plot the univariate conditions against the unconditional multivariate ones
+#Preparing the data
 d_gg_uc_at <- data.frame(cbind(pred_at_uv, p_at_gj_un, y_test$Anatropre))
 names(d_gg_uc_at) <- c("at_uv", "at_mv_un", "at")
 d_gg_uc_at$at <- factor(d_gg_uc_at$at, levels = c(0, 1), labels = c("absent", "present"))
-
-uvvsmvun_at <- ggplot(d_gg_uc_at, aes(x=at_uv, y=at_mv_un, shape=factor(at))) + geom_point() +
-  ggtitle("Univariate vs. Unconditional Multivariate Predictions for Culex perexiguus") +
+#Plotting "Univariate vs. Unconditional Multivariate Predictions for Anopheles troparvus"
+ggplot(d_gg_uc_at, aes(x=at_uv, y=at_mv_un, shape=factor(at))) + geom_point() +
+  ggtitle("Univariate vs. Unconditional Multivariate Predictions for Anopheles troparvus") +
   xlab("Predictions from Univariate Probit ") + 
   ylab("Unconditional Predictions from Multivariate Probit") +
   labs(shape = "True PA of Culex perexiguus") + ylim(0, 1)
-uvvsmvun_at
+
 #Predictions are on one line, but not the identity line >> contradicts our hypothesis that 
 #univariate probit predictions and unconditional multivariate probit predictions do not differ
-#As for Culex, mv predictions are higher for low predictions and the other way around for high
-#predictions
+#Like for Culex, multivariate predictions are higher for low predictions and the other way
+#around for high predictions.
 
 ###Conditional predictions
 #Anopheles troparvus conditioned on Culex perexiguus 
 #storing input data in newdata, inclduing the PA of Culex
-set.seed(333)
 newdata <- list(xdata = test_gj, ydataCond = y_test[,1], nsim = 4000) # conditionally predict out-of-sample
 #Doing the actual prediction
 pred_at_mvco      <- gjamPredict(output = joint_fin, newdata = newdata)
@@ -1331,7 +1352,7 @@ p_at_mvco <- pred_at_mvco$sdList$yMu[,2]
 auc_at_mvco <- auc(response = test$Anatropre, predictor = p_at_mvco)
 auc_at_mvco
 #AUC roughly .89 >> So, there is a considerable improvement of .04 in AUC >> corroborates
-#our hypothesis that PA data enhances predictions :)
+#our hypothesis that PA-data of other species enhances predictions.
 
 #Plotting Univariate Predictions vs. Conditional Multivariate Predictions
 d_gg_at <- data.frame(cbind(pred_at_uv, p_at_mvco, y_test$Anatropre, y_test$Cxperpre))
@@ -1340,41 +1361,42 @@ names(d_gg_at) <- c("at_uv", "at_mv", "at", "cp")
 d_gg_at$cp <- factor(d_gg_at$cp, levels = c(0, 1), labels = c("absent", "present"))
 d_gg_at$at <- factor(d_gg_at$at, levels = c(0, 1), labels = c("absent", "present"))
 
-provsgj_at <- ggplot(d_gg_at, aes(x=at_uv, y=at_mv, color=cp, shape = at)) + geom_point() +
+ggplot(d_gg_at, aes(x=at_uv, y=at_mv, color=cp, shape = at)) + geom_point() +
   ggtitle("Univariate vs. Conditional Multivariate Predictions for Anopheles troparvus") +
   xlab("Predictions from Univariate Probit ") + ylab("Conditional Predictions from Multivariate Probit") +
   labs( color = "PA of Culex perexiguus", shape = "PA of Anopheles troparvus") + ylim(0,1)
-provsgj_at
+
 
 #We can see that the conditioning on the PA of CUlex has a clear effect on predictions of 
 #mv-probit. It's roughly .125 high, if Culex is present. Moreover, we detect the same pattern
 #as in the unconditional vs. uv-plot: for low predictions mv has higher predictions and for 
 #high predictions the other way around.
 
+##############################################################################################
 ####################################6.2b Uncertainty in the predictions#######################
 #We take a look at the dispersion of the predictions for the three prediction types.  
 
-######For Culex perexiguus
-###For the univariate model
+####For Culex perexiguus
+###For the univariate model; We need to take the predictions on the probability scale
+#We obtain them, getting the posterior predictions of the linear predictor (posterior_linpred)
+#and transforming these value with the link function (transform = T)
 pred_cpuv <- posterior_linpred(fit_fin_cp, transform = T, newdata = test, seed = 333)
 
 #mean of the (standard deviations of the  predictions per observation)
 sd_cpuv <- apply(pred_cpuv, 2, sd) %>% mean
 #sd roughly .07
-#for the unconditional predictions
+#for the unconditional predictions from the multivariate model
 sd_cp_mvun <- apply(pred_cp_gj_un$ychains[,1:140], 2, sd) %>% mean
 #sd (.26) is a lot higher than for the univariate case
 #for the conditional predictions
 sd_cp_mvco <- apply(pred_cp_mvco$ychains[,1:140], 2, sd) %>% mean
-#DAMN, the sd (.25) is way higher than in the univariate case >> would mean that the condtional 
+#The sd (.25) is way higher than in the univariate case >> would mean that the conditional 
 #predictions are a lot more uncertain; slightly lower than the unconditional predictions.
 #So, the uncertainty is probably induced by the different modelling approaches (multi vs. 
-#univariate + difference in fitting between gjam and rstanarm), not the conditioning. I think,
-#the reason is that gjam additonally (to the linear predictor with the environmental 
-#covariates)draws the residual error from the multivariate normal distribution>> 
-#More dispersion
+#univariate + difference in fitting between gjam and rstanarm), not the conditioning. 
 
 #Plotting uncertainties of predictions with boxplots for single randomly drawn observations
+#draw the observation
 i <- sample(seq_len(nrow(test)), size = 1)
 
 #make the dataframe with all the predictions of observation i for all three prediction types
@@ -1384,6 +1406,7 @@ names(d_gg_bpso) <- c("pred")
 d_gg_bpso$type <- c(rep("Univariate", length(pred_cpuv[,i])),
                     rep("Unconditional Multivariate", length(pred_cp_gj_un$ychains[,i])),
                     rep("Conditional Multivariate", length(pred_cp_mvco$ychains[,i])))
+#adding a column with the observation #
 d_gg_bpso$obs <- i
 # Boxplot shows Boxes: 25% and 75 % Quantile; vertical line: median;
 #lower whisker = smallest observation greater than or equal to lower hinge - 1.5 * IQR; 
@@ -1427,25 +1450,24 @@ ggplot(frame_cp, aes(single, single))+
 #confidence bands for the the multivariate predictions are much, much broader (Hypothesis 2).
 #Unconditional and condtional predictions seem to behave similarly
 
-####################For Anopheles
+##############################################################################################
+####For Anopheles
 ###For the univariate model
 pred_atuv <- posterior_linpred(fit_fin_at, transform = T, newdata = test, seed = 333)
 
 #mean of the (standard deviations of the  predictions per observation)
 sd_atuv <- apply(pred_atuv, 2, sd) %>% mean
 #sd roughly .06
+
 #for the unconditional predictions
 sd_at_mvun <- apply(pred_at_gj_un$ychains[,141:280], 2, sd) %>% mean
 #sd (.23) is a lot higher than for the univariate case
+
 #for the conditional predictions
 sd_at_mvco <- apply(pred_at_mvco$ychains[,141:280], 2, sd) %>% mean
-#the sd (.22) is way higher than in the univariate case >> would mean that the condtional 
+#the sd (.22) is way higher than in the univariate case >> would mean that the conditional 
 #predictions are a lot more uncertain; slightly lower than the unconditional predictions.
-#So, the uncertainty is probably induced by the different modelling approaches (multi vs. 
-#univariate + difference in fitting between gjam and rstanarm), not the conditioning. I think,
-#the reason is that gjam additonally (to the linear predictor with the environmental 
-#covariates)draws the residual error from the multivariate normal distribution>> 
-#More dispersion
+#Same discussion as for Culex perexiguus
 
 #Plotting uncertainties of predictions with boxplots for single randomly drawn observations
 
@@ -1456,10 +1478,11 @@ names(d_gg_bpso) <- c("pred")
 d_gg_bpso$type <- c(rep("Univariate", length(pred_atuv[,i])),
                     rep("Unconditional Multivariate", length(pred_at_gj_un$ychains[,i])),
                     rep("Conditional Multivariate", length(pred_at_mvco$ychains[,i])))
+#adding a column with observation #
 d_gg_bpso$obs <- i
 # Boxplot shows Boxes: 25% and 75 % Quantile; vertical line: median;
 #lower whisker = smallest observation greater than or equal to lower hinge - 1.5 * IQR; 
-#points: "remaining" outliers (die Erläuterungen komm in den Text unter der Abbildung)
+#points: "remaining" outliers 
 ggplot(d_gg_bpso, aes(x = pred, y = type)) +
   geom_boxplot(aes(color = type)) + labs(title = paste0("Boxplot of 4000-simulated Predictions for Observation ", i),
                                          subtitle = "Anopheles troparvus",
