@@ -1589,7 +1589,7 @@ dal_cp_con <- explain(joint_fin, xdata_con, y = train$Cxperpre,
 #permutation-based variable importance measure
 set.seed(1980)
 #Doing it for 50 permutations
-vi_cp_con <- model_parts(dal_cp_con, type = "difference", B = 50)
+vi_cp_con <- model_parts(dal_cp_con, type = "difference", B = 5)
 
 #plotting the results
 plot(vi_cp_con) + labs(title = "Variable Importance", subtitle = "created for the multivariate probit model of Culex perexiguus conditional on Anopheles troparvus")
@@ -1765,11 +1765,11 @@ names(d_gg_uc_cp) <- c("cp_uv", "cp_mv_un", "cp")
 d_gg_uc_cp$cp <- factor(d_gg_uc_cp$cp, levels = c(0, 1), labels = c("absent", "present"))
 
 #Plot "Univariate vs. Unconditional Multivariate Predictions for Culex perexiguus"
-ggplot(d_gg_uc_cp, aes(x=cp_uv, y=cp_mv_un, shape=factor(cp))) + geom_point() +
+ggplot(d_gg_uc_cp, aes(x=cp_uv, y=cp_mv_un, color=factor(cp))) + geom_point() +
   ggtitle("Univariate vs. Unconditional Multivariate Predictions for Culex perexiguus") +
-  xlab("Predictions from Univariate Probit ") + 
+  xlab("Predictions from Univariate Probit ") + geom_abline(slope=1, intercept=0) + 
   ylab("Unconditional Predictions from Multivariate Probit") +
-  labs(shape = "Observed PA of Culex perexiguus") + ylim(0, 1)
+  labs(color = "Observed PA of Culex perexiguus") + ylim(0, 1) 
 
 #They look as if they are centered around the identity line >> the predictions are more or less 
 #the same! There is a slight tendency, though: For low predictions multivariate predictions are
@@ -1800,7 +1800,8 @@ d_gg_cp$at <- factor(d_gg_cp$at, levels = c(0, 1), labels = c("absent", "present
 ggplot(d_gg_cp, aes(x=cp_uv, y=cp_mv, color=at, shape = cp)) + geom_point() +
   ggtitle("Univariate vs. Conditional Multivariate Predictions for Culex perexiguus") +
   xlab("Predictions from Univariate Probit ") + ylab("Conditional Predictions from Multivariate Probit") +
-  labs( color = "PA of Anopheles troparvus", shape = "PA of Culex perexiguus") + ylim(0,1)
+  labs( color = "PA of Anopheles troparvus", shape = "PA of Culex perexiguus") + ylim(0,1) +
+  geom_abline(slope=1, intercept=0)
 
 #You can see that there is a positive linear relationship between the predictions
 #of the two models grouped by the PA of Anopheles troparvus (the species we conditioned on).
@@ -1847,11 +1848,11 @@ d_gg_uc_at <- data.frame(cbind(pred_at_uv, p_at_gj_un, y_test$Anatropre))
 names(d_gg_uc_at) <- c("at_uv", "at_mv_un", "at")
 d_gg_uc_at$at <- factor(d_gg_uc_at$at, levels = c(0, 1), labels = c("absent", "present"))
 #Plotting "Univariate vs. Unconditional Multivariate Predictions for Anopheles troparvus"
-ggplot(d_gg_uc_at, aes(x=at_uv, y=at_mv_un, shape=factor(at))) + geom_point() +
+ggplot(d_gg_uc_at, aes(x=at_uv, y=at_mv_un, color=factor(at))) + geom_point() +
   ggtitle("Univariate vs. Unconditional Multivariate Predictions for Anopheles troparvus") +
   xlab("Predictions from Univariate Probit ") + 
   ylab("Unconditional Predictions from Multivariate Probit") +
-  labs(shape = "True PA of Culex perexiguus") + ylim(0, 1)
+  labs(color = "True PA of Culex perexiguus") + ylim(0, 1) + geom_abline(slope=1, intercept=0)
 
 #Predictions are on one line, but not the identity line >> contradicts our hypothesis that 
 #univariate probit predictions and unconditional multivariate probit predictions do not differ
@@ -1882,7 +1883,8 @@ d_gg_at$at <- factor(d_gg_at$at, levels = c(0, 1), labels = c("absent", "present
 ggplot(d_gg_at, aes(x=at_uv, y=at_mv, color=cp, shape = at)) + geom_point() +
   ggtitle("Univariate vs. Conditional Multivariate Predictions for Anopheles troparvus") +
   xlab("Predictions from Univariate Probit ") + ylab("Conditional Predictions from Multivariate Probit") +
-  labs( color = "PA of Culex perexiguus", shape = "PA of Anopheles troparvus") + ylim(0,1)
+  labs( color = "PA of Culex perexiguus", shape = "PA of Anopheles troparvus") + ylim(0,1) +
+  geom_abline(slope=1, intercept=0)
 
 
 #We can see that the conditioning on the PA of CUlex has a clear effect on predictions of 
@@ -1911,6 +1913,18 @@ sd_cp_mvco <- apply(pred_cp_mvco$ychains[,1:140], 2, sd) %>% mean
 #predictions are a lot more uncertain; slightly lower than the unconditional predictions.
 #So, the uncertainty is probably induced by the different modelling approaches (multi vs. 
 #univariate + difference in fitting between gjam and rstanarm), not the conditioning. 
+
+#Plotting the SDs of every predictions against each other (univariate vs. conditional
+#predictions)
+#making the ggplot dataframe
+gg_sd_cp <- data.frame(apply(pred_cpuv, 2, sd), apply(pred_cp_mvco$ychains[,1:140], 2, sd))
+names(gg_sd_cp) <- c("uv", "mvco")
+ggplot(gg_sd_cp, aes(x = uv, y = mvco)) + geom_point() + geom_abline(slope = 1, intercept = 0) +
+  ylim(0,.4) + xlim(0, .4) + labs(title = "Standard Deviations of Univariate and Conditional Multivariate Predictions per Observation",
+                                  y ="Standard Deviation of Multivariate Conditional Predictions",
+                                  x = "Standard Deviation of Univariate Predictions")
+
+#SDs of univariate predictions are consistently lower than SDs of multivariate predictions.
 
 #Plotting uncertainties of predictions with boxplots for single randomly drawn observations
 #draw the observation
@@ -1984,6 +1998,17 @@ sd_at_mvco <- apply(pred_at_mvco$ychains[,141:280], 2, sd) %>% mean
 #the sd (.22) is way higher than in the univariate case >> would mean that the conditional 
 #predictions are a lot more uncertain; slightly lower than the unconditional predictions.
 #Same discussion as for Culex perexiguus
+
+#Plotting the SDs of every predictions against each other (univariate vs. conditional
+#predictions)
+#making the ggplot dataframe
+gg_sd_at <- data.frame(apply(pred_atuv, 2, sd), apply(pred_at_mvco$ychains[,141:280], 2, sd))
+names(gg_sd_at) <- c("uv", "mvco")
+ggplot(gg_sd_at, aes(x = uv, y = mvco)) + geom_point() + geom_abline(slope = 1, intercept = 0) +
+  ylim(0,.4) + xlim(0, .4) + labs(title = "Standard Deviations of Univariate and Conditional Multivariate Predictions per Observation",
+                                  y ="Standard Deviation of Multivariate Conditional Predictions",
+                                  x = "Standard Deviation of Univariate Predictions")
+#SDs of univariate predictions are consistently lower!
 
 #Plotting uncertainties of predictions with boxplots for single randomly drawn observations
 
