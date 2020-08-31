@@ -22,14 +22,13 @@ library(gjam) #Doing the joint estimation with the GJAM modelling aproach
 library(ggplot2) #for plotting
 library(DHARMa) # for checking in-sample validity of the models
 library(dplyr) # for simplified syntax and neater code
-library(corrplot)
 library(loo) #to calculate WAIC
 library(bayesplot) #Some handy features for plotting in the Bayesian realm
 library(matrixStats)#for quantile calculations
 library(ggplot2)#for plotting
 library(DALEX)#For Variable Importance
 
-#####################################1.Data Preperation#######################################
+##########################################1.Data Preperation#######################################
 #read in the data (Monthly species PA data for seven different mosquito species
 #and according environmental covariates)
 df <- read_excel("MonthlyData.xlsx")
@@ -108,10 +107,9 @@ ml   <- list(ng = 4000, burnin = 1000, typeNames = types)
 joint_fin <- gjam(~  Mayo + Junio + Julio + Agosto + Septiembre + IA_500 +
                     NDVIBEF_2000 + I(IA_500^2) + I(NDVIBEF_2000^2),
                   ydata = y_train, xdata = train_gj, modelList = ml)
-##############################################################################################
-#######################################6. Results#############################################
-#######################################6.1. In-sample:########################################
-##a. Comparing the coefficients: Size, Significance and credibility intervals
+##########################################6. Results#############################################
+##########################################6.1. In-sample:########################################
+#####################################6.1.a. Comparing the coefficients: Size, Significance and credibility intervals###########
 #Plotting all the coefficients in one plot per species
 
 ####For Culex perexiguus
@@ -161,7 +159,7 @@ coef_at <- ggplot(combined, aes(x = m, y = parameter, color = model)) +
 #set plotting them back to default
 theme_set(theme_grey())
 
-####the hard numbers: Tables with the coefficients and SEs
+#### the hard numbers: Tables with the coefficients and SEs
 
 #Comparison of the coefficients of CP
 #Make a table (dataframe) to store different coefficients and SEs according to the models
@@ -207,7 +205,7 @@ se_sum_at
 #Everything looks pretty similar as expected. Difference between coefficients way smaller than according SEs.
 #only exception is september dummy, but for that the SE is also very large.
 
-################6.1b Correlation between the responses (raw vs. residual correlation)##########
+#####################################6.1.b Correlation between the responses (raw vs. residual correlation)##########
 #raw correlation
 cor(spec$Cxperpre, spec$Anatropre) #pearson correlation coefficient
 
@@ -227,7 +225,7 @@ joint_fin$parameters$corMu #It's the pearson correlation coefficient (for two
 #dummies are different)! But there is still a lot of unexplained Correlation.
 
 
-###################################c. Response Curves#########################################
+#####################################6.1.c. Response Curves#########################################
 ####For Culex perexiguus
 
 ###Response Curve für IA_500:predict the probability of presence for different ia-values 
@@ -598,8 +596,8 @@ for( i in levels(xdata$Mes)){
 #Example: Septiembre
 plots_uv_con[[6]]
 
-#################################################################################################
-##For Anopheles troparvus
+
+####For Anopheles ####
 ###Response Curve für IA_500 :predict the probability of presence for the different ia-values,
 #holding the other covariates at their mean (0) or at a constant factor level (mes)
 
@@ -772,7 +770,6 @@ for( i in levels(xdata$Mes)){
 #Example: July
 plots_uv_con[[4]]
 #Why do the curves have different forms?
-################################################
 ####for NDVIBEF
 
 ###For the univariate model
@@ -946,8 +943,7 @@ for( i in levels(xdata$Mes)){
 
 #Example: April
 plots_uv_con[[1]]
-##############################################################################################
-#############################6.1d Variable Importance with DALEX################################
+#####################################6.1d Variable Importance with DALEX################################
 ####For Culex perexiguus
 ####for univariate model
 
@@ -1077,8 +1073,7 @@ plot(vi_cp_con) + labs(title = "Variable Importance", subtitle = "created for th
 #The reason is that the PA-data takes away some of the predictive power of the environmental 
 #covariates.
 
-##############################################################################################
-####For Anopheles
+####For Anopheles####
 ###For Univariate Probit Model
 #make the explainer
 dal_at <- explain(fit_fin_at, xdata, y = train$Anatropre, predict_function = pred_uv,
@@ -1195,10 +1190,8 @@ plot(vi_at_con) + labs(title = "Variable Importance", subtitle = "created for th
 #Mes variable does not lose much of its importance measured in dif. The other two variables lose 
 #considerably.
 
-##############################################################################################
-##################################################6.2. Out-of-Sample##########################
-###############a. Conditional Predictions of gjam vs. Unconditional Predictions of############
-###############gjam vs. predictions of univariate model#######################################
+##########################################6.2. Out-of-Sample##########################
+#####################################6.2.a. Conditional Predictions of gjam vs. Unconditional Predictions of gjam vs. predictions of univariate model####
 
 #We evaluate predictive performance on our test set with the AUC.
 
@@ -1294,8 +1287,7 @@ ggplot(d_gg_cp, aes(x=cp_uv, y=cp_mv, color=at, shape = cp)) + geom_point() +
 #12.5 % points higher probability of occurence for plots where Anopheles troparvus is present 
 #compared to plots where it's absent.
 
-##############################################################################################
-####for Anopheles troparvus
+####for Anopheles ####
 #We evaluate predictive performance on our test set with the AUC
 #We make the three predictions ((i) univariate, (ii) unconditional multivariate and (iii)
 #conditional multivariate)
@@ -1372,8 +1364,7 @@ ggplot(d_gg_at, aes(x=at_uv, y=at_mv, color=cp, shape = at)) + geom_point() +
 #as in the unconditional vs. uv-plot: for low predictions mv has higher predictions and for 
 #high predictions the other way around.
 
-##############################################################################################
-####################################6.2b Uncertainty in the predictions#######################
+#####################################6.2.b Uncertainty in the predictions#######################
 #We take a look at the dispersion of the predictions for the three prediction types.  
 
 ####For Culex perexiguus
@@ -1450,8 +1441,7 @@ ggplot(frame_cp, aes(single, single))+
 #confidence bands for the the multivariate predictions are much, much broader (Hypothesis 2).
 #Unconditional and condtional predictions seem to behave similarly
 
-##############################################################################################
-####For Anopheles
+####For Anopheles####
 ###For the univariate model
 pred_atuv <- posterior_linpred(fit_fin_at, transform = T, newdata = test, seed = 333)
 
