@@ -22,8 +22,8 @@ predict_multivarite_probit_2 <- function(fit, formula, newdata, n_max = 1000) {
     })
     corr <- draws_df[j, "Omega.1.2."]
     p11 <- pbivnorm(x = means[,1], y = means[,2], rho = corr)
-    p10 <- pbivnorm(x = means[,1], y = -means[,2], rho = corr)
-    p01 <- pbivnorm(x = -means[,1], y = means[,2], rho = corr)
+    p10 <- pbivnorm(x = means[,1], y = -means[,2], rho = -corr)
+    p01 <- pbivnorm(x = -means[,1], y = means[,2], rho = -corr)
     p00 <- 1 - (p11 + p10 + p01)
     p1_uncond <- p11 + p10
     p2_uncond <- p11 + p01
