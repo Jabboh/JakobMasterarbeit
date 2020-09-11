@@ -1,4 +1,4 @@
-################################Analysis of Culex perexiguus & Anopheles troparvus:
+##################################Analysis of Culex perexiguus & Anopheles troparvus:
 #Comparing Univariate probit models with multivariate probit models. Procedure:
 #1. Data preparation
 #2. Fitting the most complex models (all environmental covariates 
@@ -116,7 +116,8 @@ cp_data <- make_multivariate_data(rhs_formula, ydata = y_train[,"Cxperpre", drop
                                   data = train)
 
 
-#' Fit the CP with multiivariate probit model
+#' Fit the CP with multiivariate probit model (Wenn die Ergebnisse Sinn ergeben, werde ich Rstan
+#' Version benutzen (weil ich hab ja DHARMa und so alles mit rstan gemacht...))
 
 cp_fit <- stan(
   file = "multivariate_probit.stan",
@@ -176,7 +177,6 @@ cp_cp <- extract_betas(cp_fit, 1)
 
 
 
-#########Bin Hier am Durchchecken!
 plot_betas <- function(x, y, x_label, y_label, title_species = "") {
   title <- paste(x_label, "vs.", y_label, "Coefficients and their 95 % - Credibility Intervals \n for", title_species)
   posterior_1 <- as.matrix(x) #rstanarm nimmt den median als Schätzer für den Parameter
@@ -270,9 +270,10 @@ predict_multivarite_probit_1 <- function(fit, formula, newdata, n_max = 4000, ty
   }
   means <- apply(draws_df, 1, function(betas) model_matrix %*% betas)
   if (type == "link") return(means)
-  if (type == "response") return(pnorm(means))
+  if (type == "response") return(pnorm(means)) #Ich glaube hier ist was fishy!
 }
 
+#also type = response funktioniert meiner Meinung nicht
 cp_p <- predict_multivarite_probit_1(cp_fit, rhs_formula, train, type = "response")
 
 
@@ -282,7 +283,7 @@ cp_multi_p <- ap_cp_multi_p$p1_uncond
 #' rstanarm version of probit regression
 full_formula <- as.formula(paste("Cxperpre ~", as.character(rhs_formula)[2]))
 cp_arm_fit <- stan_glm(full_formula, data = train, refresh = 0, family = binomial(link = "probit"), 
-                       init_r = .7, seed = 333)
+                       init_r = 1.5, seed = 333)
 cp_arm_p <- t(posterior_linpred(cp_arm_fit, seed = 23, draws = 4000, transform = TRUE))
 
 #' Mean posterior predictions are the same for the 325 plots
@@ -292,7 +293,14 @@ op <- par(no.readonly = TRUE)
 plot(rowMeans(cp_p), rowMeans(cp_multi_p), asp = 1, xlim = c(0, 1), ylim = c(0, 1))
 abline(0, 1)
 
+#with rstanarm
+plot(rowMeans(cp_arm_p), rowMeans(cp_multi_p), asp = 1, xlim = c(0, 1), ylim = c(0, 1))
+abline(0, 1)
+
 par(op)
+#multivariate and univariate models are more or less identical
+
+
 
 #' # Uncertainties for the predicted plots - here expressed as the sd of posterior probability of occurrence
 op <- par(no.readonly = TRUE)
@@ -302,6 +310,13 @@ plot(apply(cp_p, 1, sd), apply(cp_multi_p, 1, sd), asp = 1)
 abline(0, 1)
 par(op)
 
+#with rstanarm
+plot(apply(cp_arm_p, 1, sd), apply(cp_multi_p, 1, sd), asp = 1)
+abline(0, 1)
+
+
+#multivariate and univariate models are more or less identical
+############################BIN HIER
 #' Conditional predictions
 cp_multi_cond_p <- ap_cp_multi_p$p1_cond
 cp_multi_cond_0_p <- ap_cp_multi_p$p1_cond_0

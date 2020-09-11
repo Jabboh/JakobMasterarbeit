@@ -1,4 +1,4 @@
-################################Analysis of Culex perexiguus & Anopheles troparvus:
+##################################Analysis of Culex perexiguus & Anopheles troparvus:
 #Comparing Univariate probit models with multivariate probit models. Procedure:
 #1. Data preparation
 #2. Fitting the most complex models (all environmental covariates 
@@ -367,14 +367,15 @@ testSpatialAutocorrelation(dharm_gj_un_spatial,
 
 #I proceed as follows. I drop each environmental covariate(month, NDVI, IA...) 
 #and the related terms (quadratic + interactions) separately and choose the model with
-#the lowest WAIC (the best reduced model). If this WAIC is higher (meaning worse)
-#than the WAIC of the complex model, I repeat the steps until the more complex model has
-#a lower WAIC (meaning better model).
+#the lowest WAIC (the best reduced model). If this WAIC is lower (meaning better)
+#than the WAIC of the complex model, I repeat the steps with the best reduced model as the new
+#complex model until the more complex model has a lower WAIC (meaning better model) than the 
+#best reduced model.
 #At the end of this first step,
 #I have chosen the principal covariates of my model. Next, I want to choose the
 #functional relationship of them with regard to the response. For this, I first
 #check whether dropping the interaction terms reduces the WAIC. So I drop them
-#iteratevly and again choose the model with the lowest AIC. Afterwards I do 
+#iteratevly and again choose the model with the lowest WAIC. Afterwards I do 
 #the same for the quadratic forms of the covariates.
 
 #Loading the step functions I created for dropping covariates.
@@ -2062,3 +2063,4 @@ ggplot(frame_at, aes(single, single))+
 
 #confidence bands for the the multivariate predictions are much, much broader (Hypothesis 2).
 #Unconditional and condtional predictions seem to behave similarly,
+
