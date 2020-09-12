@@ -1154,7 +1154,7 @@ gg_sd_cp <- data.frame(apply(pred_cpuv, 2, sd), apply(pred_mul$p1_uncond, 1, sd)
 names(gg_sd_cp) <- c("uv", "mvun", "mvco", "at", "train")
 #make factor out of at
 gg_sd_cp$at <- factor(gg_sd_cp$at, levels = c(0, 1), labels = c("absent", "present"))
-gg_sd_cp$train <- factor(gg_sd_cp$train, levels = c(True, False), labels = c("train", "test"))
+gg_sd_cp$train <- factor(gg_sd_cp$train, levels = c(TRUE, FALSE), labels = c("train", "test"))
 
 #Univariate vs. unconditional multivariate
 ggplot(gg_sd_cp, aes(x = uv, y = mvun)) + geom_point() + geom_abline(slope = 1, intercept = 0) +
@@ -1267,7 +1267,7 @@ gg_sd_at <- data.frame(apply(pred_atuv, 2, sd), apply(pred_mul$p2_uncond, 1, sd)
 names(gg_sd_at) <- c("uv", "mvun", "mvco", "cp", "train")
 #make factor out of at
 gg_sd_at$cp <- factor(gg_sd_at$cp, levels = c(0, 1), labels = c("absent", "present"))
-gg_sd_at$train <- factor(gg_sd_at$train, levels = c(True, False), labels = c("train", "test"))
+gg_sd_at$train <- factor(gg_sd_at$train, levels = c(TRUE, FALSE), labels = c("train", "test"))
 
 #Univariate vs. unconditional multivariate
 ggplot(gg_sd_at, aes(x = uv, y = mvun)) + geom_point() + geom_abline(slope = 1, intercept = 0) +
